@@ -1,0 +1,11 @@
+{
+  "name": "Bolu Lari!",
+  "short_name": "Bolu Lari",
+  "description": "Game lari 3D ramah anak yang dikendalikan gerakan badan lewat webcam.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#5ec8ff",
+  "theme_color": "#5ec8ff",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
