@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Body Runner</title>
+  <meta name="description" content="Game lari 3D ringan di browser — dikendalikan gerakan tubuh lewat webcam (condong kiri/kanan, angkat tangan untuk lompat, jongkok untuk merunduk)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- kamera + overlay pose (kiri bawah) -->
+  <div id="cam" aria-label="Pratinjau kamera">
+    <video id="video" playsinline muted></video>
+    <canvas id="pose"></canvas>
+    <div id="cam-status">kamera mati</div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <div class="stat"><span class="label">Skor</span><span id="score" class="mono">0</span></div>
+    <div class="stat"><span class="label">Jarak</span><span id="dist" class="mono">0 m</span></div>
+    <div class="stat"><span class="label">Terbaik</span><span id="best" class="mono">0</span></div>
+    <div id="gesture" class="chip">—</div>
+  </div>
+
+  <!-- layar awal -->
+  <section id="start" class="overlay">
+    <div class="panel">
+      <h1>Body <em>Runner</em></h1>
+      <p class="lead">Lari 3D yang dikendalikan tubuhmu. Berdiri ±1,5 m dari webcam, pastikan kepala sampai pinggang terlihat.</p>
+      <ul class="moves">
+        <li><b>Condong kiri / kanan</b><span>pindah jalur</span></li>
+        <li><b>Angkat kedua tangan</b><span>lompat</span></li>
+        <li><b>Jongkok</b><span>merunduk</span></li>
+      </ul>
+      <button id="btn-start" class="btn">Nyalakan kamera &amp; mulai</button>
+      <button id="btn-keys" class="btn ghost">Main pakai keyboard saja</button>
+      <p class="fine">Semua pemrosesan terjadi di perangkatmu — video tidak dikirim ke mana pun. Keyboard: ← → ↑ ↓</p>
+    </div>
+  </section>
+
+  <!-- kalibrasi -->
+  <section id="calib" class="overlay" hidden>
+    <div class="panel small">
+      <h2>Berdiri tegak di tengah</h2>
+      <p class="lead">Mengukur postur netralmu… <span id="calib-count" class="mono">3</span></p>
+      <div class="bar"><div id="calib-bar"></div></div>
+    </div>
+  </section>
+
+  <!-- game over -->
+  <section id="over" class="overlay" hidden>
+    <div class="panel small">
+      <h2>Tabrakan!</h2>
+      <p class="lead">Skor <span id="final" class="mono">0</span> · terbaik <span id="final-best" class="mono">0</span></p>
+      <button id="btn-retry" class="btn">Main lagi</button>
+      <p class="fine">atau angkat kedua tangan untuk mulai lagi</p>
+    </div>
+  </section>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
