@@ -313,3 +313,46 @@ export function makeDust(scene) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Power-up: gelembung berisi ikon 3D (magnet, perisai, bintang ganda) + gelembung perisai Bolu
+// ---------------------------------------------------------------------------
+const bubbleMat = curved(new THREE.MeshToonMaterial({ color: '#bfe9ff', transparent: true, opacity: .38, depthWrite: false, emissive: '#5ec8ff', emissiveIntensity: .25 }));
+
+export function makePowerUps(scene) {
+  const icons = {
+    magnet: () => builder()
+      .add(new THREE.TorusGeometry(.26, .1, 10, 24, Math.PI), '#ff4d5e', { r: [0, 0, Math.PI] })
+      .add(new THREE.CylinderGeometry(.1, .1, .2, 12), '#e9ecef', { p: [-.26, .1, 0] })
+      .add(new THREE.CylinderGeometry(.1, .1, .2, 12), '#e9ecef', { p: [.26, .1, 0] })
+      .mesh({ outline: .025, cast: false }),
+    shield: () => {
+      const sh = new THREE.Shape(); sh.moveTo(0, .34); sh.quadraticCurveTo(.2, .3, .3, .26); sh.quadraticCurveTo(.3, -.12, 0, -.36); sh.quadraticCurveTo(-.3, -.12, -.3, .26); sh.quadraticCurveTo(-.2, .3, 0, .34);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: .08, bevelEnabled: true, bevelThickness: .04, bevelSize: .03, bevelSegments: 2 }); g.center();
+      const st = new THREE.Shape(); for (let i = 0; i < 10; i++) { const r = i % 2 ? .06 : .14, a = i * Math.PI / 5 + Math.PI / 2; i ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+      const sg = new THREE.ExtrudeGeometry(st, { depth: .04, bevelEnabled: false }); sg.center();
+      return builder().add(g, '#4c9aff').add(sg, '#ffd23f', { p: [0, .02, .1] }).mesh({ outline: .025, cast: false });
+    },
+    double: () => {
+      const st = new THREE.Shape(); for (let i = 0; i < 10; i++) { const r = i % 2 ? .1 : .23, a = i * Math.PI / 5 + Math.PI / 2; i ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+      const g = new THREE.ExtrudeGeometry(st, { depth: .06, bevelEnabled: true, bevelThickness: .03, bevelSize: .02, bevelSegments: 1 }); g.center();
+      return builder().add(g, '#ffcf33', { p: [-.17, -.06, 0], r: [0, 0, .25] }).add(g, '#ffb703', { p: [.17, .08, .05], r: [0, 0, -.2] }).mesh({ outline: .025, cast: false });
+    },
+  };
+  const list = [];
+  for (const type of Object.keys(icons)) {
+    const g = new THREE.Group();
+    const bubble = new THREE.Mesh(new THREE.SphereGeometry(.62, 24, 18), bubbleMat);
+    const icon = icons[type](); g.add(icon, bubble);
+    g.visible = false; scene.add(g);
+    list.push({ type, mesh: g, icon, active: false });
+  }
+  return list;
+}
+
+export function makeShieldBubble() {
+  const mat = curved(new THREE.MeshToonMaterial({ color: '#bfe9ff', transparent: true, opacity: .38, depthWrite: false, emissive: '#5ec8ff', emissiveIntensity: .25 }));
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1.25, 28, 20), mat);
+  m.position.y = 1.05; m.visible = false; m.renderOrder = 2;
+  return m;
+}

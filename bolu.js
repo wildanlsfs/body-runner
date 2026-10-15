@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { builder, part, toon, curved, INK } from './look.js';
 
-const PINK = '#ff8fb1', PINK_DARK = '#f2709a', CREAM = '#fff4e2', SHOE = '#7b61ff';
 
 function starGeo(r1 = .14, r2 = .06, depth = .05) {
   const s = new THREE.Shape();
@@ -12,7 +11,35 @@ function starGeo(r1 = .14, r2 = .06, depth = .05) {
   g.center(); return g;
 }
 
-export function createBolu() {
+// Topping di puncak krim (puncak krim ± y .755 dari pusat badan)
+function addTopper(b, kind) {
+  const C = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
+  if (kind === 'cherry') {
+    b.add(C(.15, 20, 16), '#ff3355', { p: [0, .86, 0] }).add(C(.04, 8, 6), '#ffd1db', { p: [.06, .92, .1] });
+    b.add(new THREE.CylinderGeometry(.018, .022, .26, 6), '#3f8f3a', { p: [.06, 1.04, -.02], r: [.2, 0, -.45] });
+    b.add(C(.07, 10, 8), '#5cc35a', { p: [.15, 1.12, -.04], s: [1.4, .45, .8], r: [0, .4, -.3] });
+  } else if (kind === 'leaf') { // simpul daun pandan
+    for (const a of [-.5, .5, 1.6]) b.add(new THREE.CapsuleGeometry(.05, .42, 3, 8), '#2f9e44', { p: [Math.sin(a) * .1, .92, Math.cos(a) * .05], r: [0, a, a * .9], s: [1.6, 1, .5] });
+    b.add(C(.09), '#40c057', { p: [0, .8, 0], s: [1.2, .8, 1.2] });
+  } else if (kind === 'berry') {
+    for (const [x, z] of [[-.1, .04], [.1, .04], [0, -.1]]) b.add(C(.11, 16, 12), '#4256c9', { p: [x, .84, z] }).add(C(.03, 6, 4), '#28307a', { p: [x, .95, z] });
+    b.add(C(.08, 10, 8), '#5cc35a', { p: [.02, .97, .02], s: [1.5, .35, .8], r: [0, .7, 0] });
+  } else if (kind === 'star') {
+    b.add(starGeo(.26, .11, .1), '#ffcf33', { p: [0, 1.0, 0] });
+  } else if (kind === 'horn') {
+    b.add(new THREE.ConeGeometry(.1, .46, 16), '#ffe066', { p: [0, 1.0, .12], r: [.35, 0, 0] });
+    for (let i = 0; i < 3; i++) b.add(new THREE.TorusGeometry(.07 - i * .018, .014, 4, 14), '#ff70a6', { p: [0, .86 + i * .1, .08 + i * .035], r: [Math.PI / 2 + .35, 0, 0] });
+    for (const sx of [-1, 1]) b.add(new THREE.ConeGeometry(.08, .18, 10), '#ffc2e2', { p: [sx * .32, .78, -.05], r: [0, 0, -sx * .5] });
+  } else if (kind === 'crown') {
+    b.add(new THREE.CylinderGeometry(.24, .27, .14, 20, 1, true), '#ffcf33', { p: [0, .84, 0] });
+    b.add(new THREE.CylinderGeometry(.23, .23, .02, 20), '#ffcf33', { p: [0, .78, 0] });
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; b.add(new THREE.ConeGeometry(.06, .16, 6), '#ffcf33', { p: [Math.sin(a) * .24, .99, Math.cos(a) * .24] }).add(C(.035, 8, 6), '#ffffff', { p: [Math.sin(a) * .24, 1.08, Math.cos(a) * .24] }); }
+    b.add(C(.05, 10, 8), '#e63946', { p: [0, .85, .27] });
+  }
+}
+
+export function createBolu(skin = {}) {
+  const PINK = skin.body || '#ff8fb1', PINK_DARK = skin.limbs || '#f2709a', CREAM = skin.cream || '#fff4e2', SHOE = skin.shoe || '#7b61ff';
   const root = new THREE.Group();          // posisi jalur & tinggi lompat (diatur game)
   const turn = new THREE.Group();          // hadap kamera (0) atau hadap depan (PI)
   const rig = new THREE.Group();           // squash & stretch dari titik tanah
@@ -23,7 +50,7 @@ export function createBolu() {
   // --- badan + topping (1 mesh) ---
   const b = builder();
   b.add(new THREE.SphereGeometry(.72, 36, 28), PINK);
-  b.add(new THREE.SphereGeometry(.5, 24, 18), '#ffc2d4', { p: [0, -.16, .34], s: [1, .82, .62] });       // perut
+  b.add(new THREE.SphereGeometry(.5, 24, 18), skin.belly || '#ffc2d4', { p: [0, -.16, .34], s: [1, .82, .62] });       // perut
   b.add(new THREE.SphereGeometry(.755, 36, 14, 0, Math.PI * 2, 0, Math.PI * .34), CREAM);                 // krim
   // lelehan krim di samping & belakang (wajah dibiarkan bersih)
   for (let i = 0; i < 14; i++) {
@@ -33,16 +60,14 @@ export function createBolu() {
     b.add(new THREE.CapsuleGeometry(.075, len, 4, 10), CREAM, { p: [Math.sin(a) * rr, .37 - len / 2, Math.cos(a) * rr] });
   }
   // meses warna-warni
-  const spr = ['#ff5d73', '#ffd23f', '#4cc9f0', '#7bd389', '#b388ff'];
+  const spr = skin.sprinkles || ['#ff5d73', '#ffd23f', '#4cc9f0', '#7bd389', '#b388ff'];
   for (let i = 0; i < 22; i++) {
     const th = .12 + (i * .618 % 1) * .85, ph = i * 2.399, r = .765;
     const p = [Math.sin(th) * Math.sin(ph) * r, Math.cos(th) * r, Math.sin(th) * Math.cos(ph) * r];
-    b.add(new THREE.CapsuleGeometry(.022, .06, 2, 6), spr[i % 5], { p, r: [ph, th * 2, i] });
+    if (p[2] > .3 && p[1] < .62) continue; // jangan di tepi depan krim (terlihat seperti mata tambahan)
+    b.add(new THREE.CapsuleGeometry(.022, .06, 2, 6), spr[i % spr.length], { p, r: [ph, th * 2, i] });
   }
-  b.add(new THREE.SphereGeometry(.15, 20, 16), '#ff3355', { p: [0, .86, 0] });                             // ceri
-  b.add(new THREE.SphereGeometry(.04, 8, 6), '#ffd1db', { p: [.06, .92, .1] });                            // kilau ceri
-  b.add(new THREE.CylinderGeometry(.018, .022, .26, 6), '#3f8f3a', { p: [.06, 1.04, -.02], r: [.2, 0, -.45] });
-  b.add(new THREE.SphereGeometry(.07, 10, 8), '#5cc35a', { p: [.15, 1.12, -.04], s: [1.4, .45, .8], r: [0, .4, -.3] }); // daun
+  addTopper(b, skin.topper || 'cherry');
   const bodyMesh = b.mesh({ outline: .028 });
   body.add(bodyMesh);
 
@@ -87,7 +112,7 @@ export function createBolu() {
     const pivot = new THREE.Group(); pivot.position.set(sx * .6, -.02, 0); body.add(pivot);
     const m = builder()
       .add(new THREE.CapsuleGeometry(.085, .2, 4, 10), PINK_DARK, { p: [0, -.16, 0] })
-      .add(new THREE.SphereGeometry(.125, 16, 12), CREAM, { p: [0, -.33, 0] })
+      .add(new THREE.SphereGeometry(.125, 16, 12), skin.hands || '#fff4e2', { p: [0, -.33, 0] })
       .mesh({ outline: .025 });
     pivot.add(m); pivot.userData.sx = sx; return pivot;
   });
@@ -198,5 +223,6 @@ export function createBolu() {
   }
 
   setMood('happy');
-  return { root, update, setMood, get facingCamera() { return Math.abs(facing) < .5; } };
+  function dispose() { root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); }
+  return { root, update, setMood, dispose, get facingCamera() { return Math.abs(facing) < .5; } };
 }

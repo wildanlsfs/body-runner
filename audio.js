@@ -30,4 +30,8 @@ export const sfx = {
   start: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, { dur: .16, vol: .25, delay: i * .09 })),
   cheer: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, { type: 'triangle', dur: .2, vol: .25, delay: i * .08 })),
   tick: () => tone(880, { dur: .06, vol: .15 }),
+  power: () => [660, 880, 1320].forEach((f, i) => tone(f, { type: 'triangle', dur: .14, vol: .25, delay: i * .06 })),
+  shieldPop: () => { tone(900, { type: 'square', dur: .12, vol: .18, slide: -600 }); tone(500, { dur: .25, vol: .25, slide: 500, delay: .05 }); },
+  buy: () => [523, 784, 1046, 1318].forEach((f, i) => tone(f, { type: 'triangle', dur: .16, vol: .22, delay: i * .07 })),
+  nope: () => tone(220, { type: 'square', dur: .18, vol: .15, slide: -60 }),
 };

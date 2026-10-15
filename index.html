@@ -30,12 +30,14 @@
 
   <!-- HUD -->
   <div id="hud" hidden>
-    <div class="pill score"><svg viewBox="0 0 24 24" class="ico"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg><span id="score">0</span></div>
+    <div class="pill score"><small>skor</small><span id="score">0</span></div>
+    <div class="pill coins">⭐ <span id="coins">0</span></div>
     <div class="pill dist"><span id="dist">0</span><small>m</small></div>
     <div class="pill best">🏆 <span id="best">0</span></div>
     <button id="btn-mute" class="round" aria-label="Suara" title="Suara">🔊</button>
     <div id="gesture" class="pill gesture">—</div>
   </div>
+  <div id="powers" aria-live="polite"></div>
   <div id="toast" aria-live="polite"></div>
 
   <!-- layar awal -->
@@ -53,13 +55,17 @@
         </li>
         <li>
           <svg viewBox="0 0 64 64" class="fig"><g stroke="#2a1a3a" stroke-width="4" stroke-linecap="round" fill="none"><circle cx="32" cy="16" r="7" fill="#ffd166"/><path d="M32 23v18M32 29L18 12M32 29l14-17M32 41l-8 14M32 41l8 14"/></g></svg>
-          <b>Angkat tangan</b><span>lompat</span>
+          <b>Lompat</b><span>atau angkat tangan</span>
         </li>
         <li>
           <svg viewBox="0 0 64 64" class="fig"><g stroke="#2a1a3a" stroke-width="4" stroke-linecap="round" fill="none"><circle cx="32" cy="26" r="7" fill="#ffd166"/><path d="M32 33v10M32 37l-12 4M32 37l12 4M32 43l-10 8M32 43l10 8"/></g></svg>
           <b>Jongkok</b><span>merunduk</span>
         </li>
       </ul>
+      <div class="row">
+        <span class="wallet">⭐ <b class="wallet-n">0</b></span>
+        <button class="btn chip open-shop" type="button">👕 Lemari Bolu</button>
+      </div>
       <button id="btn-start" class="btn big">📷 Nyalakan kamera &amp; main</button>
       <button id="btn-keys" class="btn soft">⌨️ Main pakai keyboard / sentuh</button>
       <p class="fine">Berdiri ±1,5 m dari kamera, badan sampai pinggang terlihat. Video diproses di HP/laptopmu saja, tidak dikirim ke mana pun.</p>
@@ -90,8 +96,30 @@
       <div id="stars" class="stars" aria-label="Bintang">☆☆☆</div>
       <h2 id="over-title">Aduh, nabrak!</h2>
       <p class="lead">Skor <b id="final">0</b> · terbaik <b id="final-best">0</b></p>
+      <p class="earned">+<b id="earned">0</b> ⭐ <span>· total <b class="wallet-n">0</b></span></p>
+      <p id="unlock-hint" class="unlock-hint" hidden></p>
       <button id="btn-retry" class="btn big">🔁 Main lagi</button>
-      <p class="fine">atau angkat kedua tangan</p>
+      <button class="btn soft open-shop" type="button">👕 Lemari Bolu</button>
+      <p class="fine">atau lompat / angkat kedua tangan</p>
+    </div>
+  </section>
+
+  <!-- lemari: skin & upgrade (Bolu tampil besar di belakang panel) -->
+  <section id="shop" hidden>
+    <div class="sheet" role="dialog" aria-labelledby="shop-title">
+      <header>
+        <h2 id="shop-title">Lemari Bolu</h2>
+        <span class="wallet">⭐ <b class="wallet-n">0</b></span>
+        <button id="btn-shop-close" class="round" type="button" aria-label="Tutup lemari">✕</button>
+      </header>
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab on" data-tab="skins">👕 Skin</button>
+        <button role="tab" class="tab" data-tab="ups">⚡ Upgrade</button>
+      </div>
+      <div id="skin-list" class="grid"></div>
+      <div id="up-list" class="ups" hidden></div>
+      <button id="btn-shop-done" class="btn big">Selesai</button>
+      <p class="fine">Bintang didapat dari bermain. Tidak ada pembelian dengan uang sungguhan.</p>
     </div>
   </section>
 
