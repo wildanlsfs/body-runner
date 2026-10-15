@@ -12,7 +12,7 @@ Game lari 3D **ramah anak** di browser yang dikendalikan **gerakan badan lewat w
 | Keyboard ← → ↑ ↓ / WASD, geser di layar sentuh | mode tanpa kamera |
 | Esc / P | jeda |
 
-Teknologi: [Three.js](https://threejs.org) (dunia 3D low-poly: Bolu si bola merah muda, awan gembul, pohon lolipop, peti kayu, bintang) + [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (deteksi pose di perangkat, model *lite* ±3 MB). Suara disintesis dengan WebAudio — tidak ada file audio. Semua pemrosesan terjadi di browser; video tidak pernah dikirim ke server.
+Teknologi: [Three.js](https://threejs.org) — dunia kartun prosedural (tanpa file model): toon shading 3 tingkat, garis tepi *inverted hull*, bayangan lembut, Bolu si kue bolu bertopping krim & ceri dengan animasi lari/lompat/merunduk/kedip/pusing, rumah jamur, pagar, peti, gapura bendera. Tiap properti digabung jadi 1 geometri ber-vertex-color supaya ringan di HP. + [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (deteksi pose di perangkat, model *lite* ±3 MB). Suara disintesis dengan WebAudio — tidak ada file audio. Semua pemrosesan terjadi di browser; video tidak pernah dikirim ke server.
 
 ## Jalankan lokal
 
@@ -26,7 +26,10 @@ Kamera butuh HTTPS atau `localhost`.
 
 - `index.html` — layar awal, kalibrasi, jeda, akhir; HUD
 - `style.css` — tema ceria (Fredoka, kartu bulat, tombol tebal)
-- `main.js` — scene, karakter, rintangan/pool, pose → input, alur permainan
+- `main.js` — scene, pose → input, alur permainan, tabrakan
+- `bolu.js` — model & animasi prosedural Bolu
+- `world.js` — langit, tanah, pemandangan, rintangan, bintang, debu
+- `look.js` — material toon, garis tepi, penggabung geometri
 - `audio.js` — efek suara sintetis (koin, lompat, nabrak, sorak)
 
 ## Cara kerja pose → input
