@@ -49,9 +49,9 @@ export function createBolu(skin = {}) {
 
   // --- badan + topping (1 mesh) ---
   const b = builder();
-  b.add(new THREE.SphereGeometry(.72, 36, 28), PINK);
-  b.add(new THREE.SphereGeometry(.5, 24, 18), skin.belly || '#ffc2d4', { p: [0, -.16, .34], s: [1, .82, .62] });       // perut
-  b.add(new THREE.SphereGeometry(.755, 36, 14, 0, Math.PI * 2, 0, Math.PI * .34), CREAM);                 // krim
+  b.add(new THREE.SphereGeometry(.72, 28, 20), PINK);
+  b.add(new THREE.SphereGeometry(.5, 18, 12), skin.belly || '#ffc2d4', { p: [0, -.16, .34], s: [1, .82, .62] });       // perut
+  b.add(new THREE.SphereGeometry(.755, 28, 9, 0, Math.PI * 2, 0, Math.PI * .34), CREAM);                 // krim
   // lelehan krim di samping & belakang (wajah dibiarkan bersih)
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2 + .2;
@@ -76,7 +76,7 @@ export function createBolu(skin = {}) {
   for (const sx of [-1, 1]) {
     const eye = new THREE.Group(); eye.position.set(sx * .225, .07, .64); body.add(eye);
     const e = builder()
-      .add(new THREE.SphereGeometry(.15, 20, 16), '#ffffff', { s: [1, 1.18, .5] })
+      .add(new THREE.SphereGeometry(.15, 16, 12), '#ffffff', { s: [1, 1.18, .5] })
       .add(new THREE.SphereGeometry(.088, 16, 12), '#2b1838', { p: [sx * -.012, -.015, .05], s: [1, 1.1, .5] })
       .add(new THREE.SphereGeometry(.032, 10, 8), '#ffffff', { p: [sx * -.04, .035, .1] })
       .add(new THREE.SphereGeometry(.016, 8, 6), '#ffffff', { p: [sx * .01, -.05, .1] });
@@ -140,7 +140,7 @@ export function createBolu(skin = {}) {
   // ---------------------------------------------------------------------------
   // Animasi
   // ---------------------------------------------------------------------------
-  let phase = 0, blinkT = 2, blink = 0, squash = 0, wasAir = false, mood = 'happy', facing = 0, t = 0;
+  let phase = 0, blinkT = 2, blink = 0, squash = 0, wasAir = false, mood = 'happy', facing = 0, t = 0, crouch = 0;
 
   function setMood(m) {
     mood = m;
@@ -152,26 +152,31 @@ export function createBolu(skin = {}) {
 
   /**
    * @param {number} dt
-   * @param {{state:'idle'|'run'|'air'|'slide'|'dizzy', speed?:number, vy?:number, lean?:number}} s
+   * @param {{state:'idle'|'run'|'air'|'dive'|'slide'|'dizzy', speed?:number, vy?:number, lean?:number}} s
    */
   function update(dt, s) {
     t += dt;
     const k = (v) => Math.min(1, dt * v);
     const st = s.state;
+    const mix = (a, b, f) => a + (b - a) * f;
 
     // hadap: belakang ke kamera saat main, hadap kamera saat menu/nabrak
     const wantFace = st === 'idle' || st === 'dizzy' ? 0 : Math.PI;
     facing += (wantFace - facing) * k(8);
     turn.rotation.y = facing;
 
-    // mendarat → squash
-    const air = st === 'air';
-    if (wasAir && !air) squash = 1;
+    // mendarat → squash kecil
+    const air = st === 'air' || st === 'dive';
+    if (wasAir && !air) squash = st === 'slide' ? .5 : 1;
     wasAir = air;
     squash = Math.max(0, squash - dt * 5);
 
+    // jongkok: dicampur halus (bukan dipipihkan) supaya peralihan lari ↔ jongkok ↔ lompat mulus
+    crouch += ((st === 'slide' ? 1 : 0) - crouch) * k(st === 'slide' ? 20 : 12);
+    const c = crouch;
+
     let sy = 1, sxz = 1, armSwing = 0, legSwing = 0, armOut = .35, armUp = 0, bob = 0, tiltX = 0;
-    if (st === 'run') {
+    if (st === 'run' || st === 'slide') {
       phase += dt * (s.speed || 12) * .95;
       legSwing = Math.sin(phase) * .95;
       armSwing = -Math.sin(phase) * .85;
@@ -181,8 +186,8 @@ export function createBolu(skin = {}) {
       const vy = s.vy || 0;
       sy = 1 + THREE.MathUtils.clamp(vy * .018, -.08, .16); sxz = 1 - (sy - 1) * .5;
       armUp = 2.5; armOut = .6; legSwing = .5; tiltX = -.08;
-    } else if (st === 'slide') {
-      sy = .58; sxz = 1.18; armSwing = -1.2; armOut = .25; legSwing = -.6; tiltX = .35;
+    } else if (st === 'dive') { // menukik turun dari lompatan: badan meringkuk
+      sy = 1.06; sxz = .97; armOut = .15; armSwing = -.9; legSwing = -1.1; tiltX = .5;
     } else if (st === 'dizzy') {
       armOut = .9 + Math.sin(t * 6) * .15; bob = Math.sin(t * 3) * .03;
       dizzy.rotation.y += dt * 4;
@@ -190,36 +195,41 @@ export function createBolu(skin = {}) {
       bob = Math.sin(t * 2.4) * .04;
       sy = 1 + Math.sin(t * 2.4) * .02; sxz = 1 - Math.sin(t * 2.4) * .01;
     }
-    sy -= squash * .22; sxz += squash * .14;
+    sy = mix(sy, .94, c) - squash * .2; sxz = mix(sxz, 1.04, c) + squash * .12;
 
     rig.scale.y += (sy - rig.scale.y) * k(18);
     const nx = rig.scale.x + (sxz - rig.scale.x) * k(18); rig.scale.x = rig.scale.z = nx;
     rig.rotation.z += ((s.lean || 0) - rig.rotation.z) * k(10);
-    body.rotation.x += (tiltX - body.rotation.x) * k(10);
-    body.position.y = 1.0 + bob;
-    body.rotation.z = st === 'run' ? Math.sin(phase) * .06 : st === 'dizzy' ? Math.sin(t * 3) * .12 : 0;
+    body.rotation.x += (mix(tiltX, .45, c) - body.rotation.x) * k(12);
+    body.position.y = 1.0 + bob * (1 - c) - .4 * c + Math.sin(phase * 2) * .015 * c;
+    body.rotation.z = (st === 'run' ? Math.sin(phase) * .06 : st === 'dizzy' ? Math.sin(t * 3) * .12 : 0) + Math.sin(phase * .5) * .1 * c; // jalan jongkok bergoyang
 
     arms.forEach((a, i) => {
       const sx = a.userData.sx;
-      let rx = armSwing * (i ? -1 : 1) * (st === 'slide' ? -1 : 1), rz = sx * armOut;
-      if (st === 'slide') rx = armSwing;
+      let rx = armSwing * (i ? -1 : 1), rz = sx * armOut;
+      if (st === 'dive') rx = armSwing;
       if (st === 'air') { rx = 0; rz = sx * armUp; }
       if (st === 'idle' && i === 1) { rz = sx * (2.3 + Math.sin(t * 9) * .35); rx = 0; } // melambai
+      rx = mix(rx, .3, c); rz = mix(rz, sx * 2.8, c);   // jongkok: kedua tangan menutup kepala
       a.rotation.x += (rx - a.rotation.x) * k(16);
       a.rotation.z += (rz - a.rotation.z) * k(16);
     });
     legs.forEach((l, i) => {
-      const rx = st === 'air' ? (i ? -legSwing : legSwing * .4) : st === 'slide' ? legSwing : legSwing * (i ? -1 : 1);
-      l.rotation.x += (rx - l.rotation.x) * k(st === 'run' ? 30 : 14);
+      const sx = i ? 1 : -1;
+      let rx = st === 'air' ? (i ? -legSwing : legSwing * .4) : st === 'dive' ? legSwing : legSwing * (i ? -1 : 1);
+      rx = mix(rx, -1.25 + Math.sin(phase + i * Math.PI) * .18, c); // jongkok: lutut menekuk ke depan, kaki tetap bergerak kecil
+      l.rotation.x += (rx - l.rotation.x) * k(st === 'run' ? 30 : 16);
+      l.rotation.z = sx * .28 * c;
+      l.position.y = .46 - .28 * c;
     });
 
-    // kedip
+    // kedip; menyipit saat jongkok
     blinkT -= dt;
     if (blinkT <= 0) { blink = .14; blinkT = 1.8 + Math.random() * 2.6; }
     if (blink > 0) blink -= dt;
-    const ey = blink > 0 ? .12 : 1;
+    const ey = Math.min(blink > 0 ? .12 : 1, 1 - .45 * c);
     eyes.forEach((e) => { e.eye.scale.y += (ey - e.eye.scale.y) * k(40); });
-    brows.forEach((br, i) => { br.position.y = .29 + (mood === 'dizzy' ? .04 : st === 'air' ? .03 : 0); br.rotation.z = Math.PI / 2 + (i ? 1 : -1) * (mood === 'dizzy' ? -.3 : .18); });
+    brows.forEach((br, i) => { br.position.y = .29 + (mood === 'dizzy' ? .04 : st === 'air' ? .03 : -.03 * c); br.rotation.z = Math.PI / 2 + (i ? 1 : -1) * (mood === 'dizzy' ? -.3 : .18 + .2 * c); });
   }
 
   setMood('happy');

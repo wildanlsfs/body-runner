@@ -11,10 +11,14 @@ import { SKINS, TOPPER_ICON, POWERS, UP_PRICES, powerDuration, save, persist, sk
 const LANE_X = [-2.3, 0, 2.3];
 const PLAYER_Z = 0;
 const SPAWN_Z = -95;
-const BASE_SPEED = 12, MAX_SPEED = 26;
-const GRAVITY = -30, JUMP_V = 11;
-const SLIDE_TIME = 0.8;
-const GAP_MIN = 18;
+const GRAVITY = -30;
+// Tempo per mode kontrol. Gerakan badan manusia jauh lebih lambat dari tombol, jadi mode kamera dibuat
+// lebih santai: lari lebih pelan, jarak antar-rintangan lebih lebar, melayang & jongkok lebih lama.
+const TUNE = {
+  keyboard: { base: 12, max: 26, accel: .3, gap: 18, jumpV: 11, gravity: -30, slide: .8, laneLerp: 11, distDiv: 2 },
+  pose: { base: 8, max: 15, accel: .1, gap: 28, jumpV: 10.5, gravity: -21, slide: 1.2, laneLerp: 8, distDiv: 1.3 },
+};
+let tune = TUNE.keyboard;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -24,7 +28,7 @@ const ui = {
   score: $('score'), coins: $('coins'), dist: $('dist'), best: $('best'), gesture: $('gesture'), toast: $('toast'), powers: $('powers'),
   final: $('final'), finalBest: $('final-best'), overTitle: $('over-title'), stars: $('stars'), earned: $('earned'), unlockHint: $('unlock-hint'),
   calibCount: $('calib-count'), calibBar: $('calib-bar'), calibHint: $('calib-hint'),
-  camStatus: $('cam-status'), video: $('video'), poseCanvas: $('pose'), mute: $('btn-mute'),
+  pauseMsg: $('pause-msg'), camStatus: $('cam-status'), video: $('video'), poseCanvas: $('pose'), mute: $('btn-mute'),
   skinList: $('skin-list'), upList: $('up-list'), shopDone: $('btn-shop-done'),
 };
 
@@ -32,7 +36,9 @@ const ui = {
 // Scene: dunia kartun (toon shading + garis tepi + bayangan)
 // ---------------------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+// Resolusi: maks 1.5× lalu turun otomatis kalau perangkat tidak sanggup 50 fps (lihat adaptQuality)
+let pixelRatio = Math.min(devicePixelRatio, 1.5);
+renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
@@ -67,12 +73,17 @@ const dust = makeDust(scene);
 // Bolu — maskot kue bolu (lihat bolu.js); bisa ganti skin
 const shieldBubble = makeShieldBubble();
 let bolu = null, player = null;
+const boluCache = new Map(); // model tiap skin dibangun sekali, ganti skin berikutnya instan
 function setSkin(id) {
   const pos = player ? player.position.clone() : new THREE.Vector3(0, 0, PLAYER_Z);
-  if (bolu) { scene.remove(player); player.remove(shieldBubble); bolu.dispose(); }
-  bolu = createBolu(skinById(id));
+  if (bolu) { scene.remove(player); player.remove(shieldBubble); }
+  if (!boluCache.has(id)) {
+    const b = createBolu(skinById(id));
+    b.root.traverse((o) => { if (o.isMesh && o.material.isMeshToonMaterial) o.castShadow = true; });
+    boluCache.set(id, b);
+  }
+  bolu = boluCache.get(id); bolu.setMood('happy');
   player = bolu.root;
-  player.traverse((o) => { if (o.isMesh && o.material.isMeshToonMaterial) o.castShadow = true; });
   player.position.copy(pos); player.add(shieldBubble); scene.add(player);
 }
 setSkin(save.skin);
@@ -99,13 +110,13 @@ function burst(x, y, z, n = 14) {
 // State & input
 // ---------------------------------------------------------------------------
 const state = {
-  mode: 'start', speed: BASE_SPEED, dist: 0, score: 0, coinsTaken: 0, targetLane: 1,
-  vy: 0, y: 0, jumping: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100,
+  mode: 'start', speed: TUNE.keyboard.base, dist: 0, score: 0, coinsTaken: 0, targetLane: 1,
+  vy: 0, y: 0, jumping: false, diving: false, slideOnLand: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100,
   pw: { magnet: 0, shield: 0, double: 0 }, invuln: 0, overT: 0, shopFrom: 'start',
   best: Number((() => { try { return localStorage.getItem('bolu.best') || 0; } catch { return 0; } })()),
 };
 ui.best.textContent = state.best;
-const input = { lane: 1, jump: false, duck: false, handsUp: false, source: 'keyboard' };
+const input = { lane: 1, jump: false, duck: false, duckEdge: false, handsUp: false, source: 'keyboard' };
 
 addEventListener('keydown', (e) => {
   if (e.repeat || state.mode === 'shop') return;
@@ -113,7 +124,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'a') input.lane = Math.max(0, input.lane - 1);
   if (e.key === 'ArrowRight' || e.key === 'd') input.lane = Math.min(2, input.lane + 1);
   if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') { input.jump = true; input.handsUp = true; }
-  if (e.key === 'ArrowDown' || e.key === 's') input.duck = true;
+  if (e.key === 'ArrowDown' || e.key === 's') { input.duck = true; input.duckEdge = true; }
   if (e.key === 'Escape' || e.key === 'p') togglePause();
 });
 addEventListener('keyup', (e) => {
@@ -127,14 +138,14 @@ addEventListener('touchend', (e) => {
   if (!touchStart) return; const t = e.changedTouches[0]; const dx = t.clientX - touchStart[0], dy = t.clientY - touchStart[1]; touchStart = null;
   if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
   if (Math.abs(dx) > Math.abs(dy)) input.lane = Math.max(0, Math.min(2, input.lane + (dx > 0 ? 1 : -1)));
-  else if (dy < 0) input.jump = true; else { input.duck = true; setTimeout(() => (input.duck = false), 500); }
+  else if (dy < 0) input.jump = true; else { input.duck = true; input.duckEdge = true; setTimeout(() => (input.duck = false), 500); }
 }, { passive: true });
 
 // ---------------------------------------------------------------------------
 // Kamera + MediaPipe Pose
 // ---------------------------------------------------------------------------
 let landmarker = null, lastVideoTime = -1;
-const pose = { ok: false, midX: .5, shoulderY: .5, sw: .2, handsUp: false, baseX: .5, baseY: .5, baseSW: .2, samples: [], armed: true, noDuckUntil: 0, jumpFlash: 0 };
+const pose = { track: null, lostSince: 0, others: 0, ok: false, midX: .5, shoulderY: .5, sw: .2, handsUp: false, baseX: .5, baseY: .5, baseSW: .2, samples: [], armed: true, noDuckUntil: 0, jumpFlash: 0 };
 const pctx = ui.poseCanvas.getContext('2d');
 
 async function startCamera() {
@@ -143,7 +154,7 @@ async function startCamera() {
   const files = await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
   landmarker = await vision.PoseLandmarker.createFromOptions(files, {
     baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task', delegate: 'GPU' },
-    runningMode: 'VIDEO', numPoses: 1,
+    runningMode: 'VIDEO', numPoses: 3, // deteksi beberapa orang, lalu kunci ke pemain (lihat trackPlayer)
   });
   ui.camStatus.textContent = 'izinkan kamera ya…';
   const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false });
@@ -159,23 +170,74 @@ function setPoseFrom(lm) {
   pose.handsUp = lw.y < nose.y && rw.y < nose.y;
 }
 
+// ---------------------------------------------------------------------------
+// Kunci pemain: hanya orang yang dikunci saat kalibrasi yang menggerakkan Bolu.
+// Orang lain yang lewat (walau lebih dekat ke kamera) diabaikan.
+// ---------------------------------------------------------------------------
+const bodyOf = (lm) => ({ x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2, sw: Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y) });
+function trackPlayer(all, now) {
+  const t = pose.track;
+  if (!t) {
+    // belum terkunci: pilih yang paling dekat ke kamera (bahu terlebar) dan paling di tengah
+    let best = null, bs = -Infinity;
+    for (const lm of all) { const f = bodyOf(lm), sc = f.sw - Math.abs(f.x - .5) * .25; if (sc > bs) { bs = sc; best = lm; } }
+    if (best) { pose.track = bodyOf(best); pose.lostSince = 0; }
+    return best;
+  }
+  // sudah terkunci: pilih yang posisi & ukuran badannya paling mirip dengan pemain di frame sebelumnya
+  let best = null, bc = Infinity;
+  for (const lm of all) {
+    const f = bodyOf(lm), ratio = f.sw / t.sw;
+    if (ratio < .65 || ratio > 1.55) continue;           // jauh lebih besar/kecil → orang lain
+    const c = Math.hypot(f.x - t.x, f.y - t.y);
+    if (c < bc) { bc = c; best = lm; }
+  }
+  const maxMove = pose.lostSince ? .2 : .12;              // pemain tidak bisa "teleport" antar-frame
+  if (best && bc < maxMove) {
+    const f = bodyOf(best); t.x = f.x; t.y = f.y; t.sw += (f.sw - t.sw) * .1; pose.lostSince = 0;
+    return best;
+  }
+  if (!pose.lostSince) pose.lostSince = now;
+  return null;
+}
+
+/** Proses satu frame deteksi (dipisah dari gambar agar bisa diuji). Mengembalikan landmark pemain atau null. */
+function processFrame(all, now) {
+  const lm = trackPlayer(all, now);
+  pose.others = all.length - (lm ? 1 : 0);
+  if (!lm) {
+    pose.ok = false; input.duck = false; input.handsUp = false;
+    // pemain hilang (tertutup orang lewat / keluar layar) terlalu lama → jeda, jangan ikuti orang lain
+    if (state.mode === 'play' && input.source === 'pose' && now - pose.lostSince > 1500) { togglePause(); ui.pauseMsg.hidden = false; }
+    return null;
+  }
+  pose.ok = true;
+  setPoseFrom(lm);
+  applyPose(now);
+  return lm;
+}
+
+function drawSkeleton(lm, color, width, dots) {
+  const W = ui.poseCanvas.width, H = ui.poseCanvas.height;
+  pctx.lineWidth = width; pctx.strokeStyle = color; pctx.lineCap = 'round';
+  const seg = (a, b) => { pctx.beginPath(); pctx.moveTo(lm[a].x * W, lm[a].y * H); pctx.lineTo(lm[b].x * W, lm[b].y * H); pctx.stroke(); };
+  [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24]].forEach(([a, b]) => seg(a, b));
+  if (!dots) return;
+  pctx.fillStyle = '#ffd166';
+  [0, 11, 12, 15, 16, 23, 24].forEach((i) => { pctx.beginPath(); pctx.arc(lm[i].x * W, lm[i].y * H, 6, 0, Math.PI * 2); pctx.fill(); });
+}
+
 function readPose(now) {
   if (!landmarker || ui.video.readyState < 2 || ui.video.currentTime === lastVideoTime) return;
   lastVideoTime = ui.video.currentTime;
   const res = landmarker.detectForVideo(ui.video, now);
-  const lm = res.landmarks && res.landmarks[0];
+  const all = res.landmarks || [];
+  const lm = processFrame(all, now);
   pctx.clearRect(0, 0, ui.poseCanvas.width, ui.poseCanvas.height);
-  if (!lm) { pose.ok = false; ui.camStatus.textContent = 'Bolu nggak lihat kamu 👀'; return; }
-  pose.ok = true;
-  setPoseFrom(lm);
-
-  const W = ui.poseCanvas.width, H = ui.poseCanvas.height;
-  pctx.lineWidth = 4; pctx.strokeStyle = pose.jumpFlash > now ? '#ffd166' : '#5bd77a'; pctx.lineCap = 'round';
-  const seg = (a, b) => { pctx.beginPath(); pctx.moveTo(lm[a].x * W, lm[a].y * H); pctx.lineTo(lm[b].x * W, lm[b].y * H); pctx.stroke(); };
-  [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24]].forEach(([a, b]) => seg(a, b));
-  pctx.fillStyle = '#ffd166';
-  [0, 11, 12, 15, 16, 23, 24].forEach((i) => { pctx.beginPath(); pctx.arc(lm[i].x * W, lm[i].y * H, 6, 0, Math.PI * 2); pctx.fill(); });
-  applyPose(now);
+  for (const o of all) if (o !== lm) drawSkeleton(o, 'rgba(255,255,255,.45)', 2, false); // orang lain: abu-abu
+  if (!lm) { ui.camStatus.textContent = pose.track && all.length ? 'Itu bukan kamu — Bolu menunggumu 👀' : 'Bolu nggak lihat kamu 👀'; return; }
+  drawSkeleton(lm, pose.jumpFlash > now ? '#ffd166' : '#5bd77a', 4, true);
+  if (pose.others > 0 && state.mode === 'play') ui.camStatus.textContent += ' · tetap ikut kamu';
 }
 
 /** Ubah pose terkini (pose.midX/shoulderY/sw/handsUp) menjadi input game. */
@@ -197,8 +259,10 @@ function applyPose(now) {
   const up = pose.baseY - pose.shoulderY;
   if (!pose.armed && up < jumpT * .4) pose.armed = true;                 // sudah turun lagi → siap lompat lagi
   let jumped = false;
-  if (pose.armed && up > jumpT) { jumped = true; pose.armed = false; pose.noDuckUntil = now + 700; pose.jumpFlash = now + 300; }
-  input.duck = now > pose.noDuckUntil && -up > duckT;                     // abaikan tekukan lutut saat mendarat
+  if (pose.armed && up > jumpT) { jumped = true; pose.armed = false; pose.noDuckUntil = now + 550; pose.jumpFlash = now + 300; }
+  const duck = now > pose.noDuckUntil && -up > duckT;                     // abaikan tekukan lutut saat mendarat
+  if (duck && !input.duck) input.duckEdge = true;
+  input.duck = duck;
   if (jumped || (pose.handsUp && !input.handsUp)) input.jump = true;
   input.handsUp = pose.handsUp;
   // posisi netral pelan-pelan menyesuaikan kalau pemain bergeser maju/mundur
@@ -217,25 +281,25 @@ function refreshWallet() { document.querySelectorAll('.wallet-n').forEach((el) =
 refreshWallet();
 
 function resetRun() {
-  Object.assign(state, { speed: BASE_SPEED, dist: 0, score: 0, coinsTaken: 0, targetLane: 1, vy: 0, y: 0, jumping: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100, invuln: 0 });
+  Object.assign(state, { speed: tune.base, dist: 0, score: 0, coinsTaken: 0, targetLane: 1, vy: 0, y: 0, jumping: false, diving: false, slideOnLand: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100, invuln: 0 });
   state.pw = { magnet: 0, shield: 0, double: 0 };
-  input.lane = 1; input.jump = false; input.duck = false;
+  input.lane = 1; input.jump = false; input.duck = false; input.duckEdge = false;
   obstacles.forEach((o) => { o.active = false; o.mesh.visible = false; });
   coins.forEach((c) => { c.active = false; c.mesh.visible = false; });
   powerUps.forEach((p) => { p.active = false; p.mesh.visible = false; });
   player.position.set(0, 0, PLAYER_Z); bolu.setMood('happy');
   renderPowers();
 }
-function beginPlay() { resetRun(); state.mode = 'play'; show(ui.hud, true); show(ui.over, false); show(ui.calib, false); show(ui.pause, false); show(ui.start, false); sfx.start(); toast('Ayo lari! 🏃'); }
+function beginPlay() { tune = TUNE[input.source === 'pose' ? 'pose' : 'keyboard']; resetRun(); state.mode = 'play'; show(ui.hud, true); show(ui.over, false); show(ui.calib, false); show(ui.pause, false); show(ui.start, false); sfx.start(); toast('Ayo lari! 🏃'); }
 
 let calibStart = 0;
-function beginCalib() { state.mode = 'calib'; pose.samples = []; calibStart = performance.now(); show(ui.start, false); show(ui.calib, true); show(ui.cam, true); }
+function beginCalib() { state.mode = 'calib'; pose.samples = []; pose.track = null; pose.lostSince = 0; calibStart = performance.now(); show(ui.start, false); show(ui.calib, true); show(ui.cam, true); }
 function tickCalib(now) {
   const t = (now - calibStart) / 1000;
   const n = Math.max(0, Math.ceil(3 - t));
   if (ui.calibCount.textContent !== String(n)) { ui.calibCount.textContent = n; sfx.tick(); }
   ui.calibBar.style.width = `${Math.min(100, t / 3 * 100)}%`;
-  ui.calibHint.textContent = pose.ok ? 'Mantap, Bolu lihat kamu! 👍' : 'Berdiri di depan kamera, kepala sampai pinggang terlihat.';
+  ui.calibHint.textContent = !pose.ok ? 'Berdiri di depan kamera, kepala sampai pinggang terlihat.' : pose.others ? 'Ada orang lain terlihat — Bolu mengunci yang paling dekat & di tengah 👍' : 'Mantap, Bolu lihat kamu! 👍';
   if (t >= 3) {
     if (pose.samples.length > 10) {
       const k = pose.samples.length, avg = (i) => pose.samples.reduce((s, p) => s + p[i], 0) / k;
@@ -269,7 +333,10 @@ function gameOver() {
 
 function togglePause() {
   if (state.mode === 'play') { state.mode = 'pause'; show(ui.pause, true); }
-  else if (state.mode === 'pause') { state.mode = 'play'; show(ui.pause, false); last = performance.now(); }
+  else if (state.mode === 'pause') {
+    if (!ui.pauseMsg.hidden) { pose.track = null; pose.lostSince = 0; ui.pauseMsg.hidden = true; } // kunci ulang ke orang paling dekat & tengah
+    state.mode = 'play'; show(ui.pause, false); last = performance.now();
+  }
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden && state.mode === 'play') togglePause(); });
 
@@ -316,21 +383,27 @@ function placeCoin(lane, z) { const c = coins.find((x) => !x.active); if (!c) re
 
 function tickPlay(dt) {
   state.elapsed += dt;
-  state.speed = Math.min(MAX_SPEED, BASE_SPEED + state.elapsed * .3);
+  state.speed = Math.min(tune.max, tune.base + state.elapsed * tune.accel);
   const dz = state.speed * dt; state.dist += dz;
 
   if (input.lane !== state.targetLane) { state.targetLane = input.lane; sfx.lane(); }
-  player.position.x += (LANE_X[state.targetLane] - player.position.x) * Math.min(1, dt * 11);
+  player.position.x += (LANE_X[state.targetLane] - player.position.x) * Math.min(1, dt * tune.laneLerp);
 
-  if (input.jump && !state.jumping && state.slide <= 0) { state.vy = JUMP_V; state.jumping = true; sfx.jump(); }
+  // lompat — boleh langsung dari jongkok (jongkok dibatalkan)
+  if (input.jump && !state.jumping) { state.vy = tune.jumpV; state.jumping = true; state.diving = false; state.slideOnLand = false; state.slide = 0; sfx.jump(); }
   input.jump = false;
+  // merunduk saat di udara → menukik turun, lalu langsung jongkok begitu mendarat
+  if (input.duckEdge && state.jumping && !state.diving) { state.diving = true; state.slideOnLand = true; state.vy = Math.min(state.vy, -tune.jumpV * 1.2); sfx.duck(); }
   if (state.jumping) {
-    state.vy += GRAVITY * dt; state.y += state.vy * dt;
-    if (state.y <= 0) { state.y = 0; state.jumping = false; state.vy = 0; dust.puff(player.position.x, PLAYER_Z, 6, .6); }
-  }
-  if (input.duck && !state.jumping && state.slide <= 0) { state.slide = SLIDE_TIME; sfx.duck(); }
+    state.vy += tune.gravity * (state.diving ? 2.2 : 1) * dt; state.y += state.vy * dt;
+    if (state.y <= 0) {
+      state.y = 0; state.jumping = false; state.diving = false; state.vy = 0; dust.puff(player.position.x, PLAYER_Z, 6, .6);
+      if (state.slideOnLand) { state.slideOnLand = false; state.slide = tune.slide; }
+    }
+  } else if (input.duckEdge && state.slide <= 0) { state.slide = tune.slide; sfx.duck(); }
+  input.duckEdge = false;
   if (state.slide > 0) state.slide -= dt;
-  const sliding = state.slide > 0 || (input.duck && !state.jumping);
+  const sliding = !state.jumping && (state.slide > 0 || input.duck);
   state.sliding = sliding;
   player.position.y = state.y;
 
@@ -346,7 +419,7 @@ function tickPlay(dt) {
   scenery.scroll(dz);
   clouds.scroll(dz, dt);
   state.nextSpawnZ += dz;
-  if (state.nextSpawnZ > SPAWN_Z + GAP_MIN + Math.random() * 10) { spawnRow(SPAWN_Z); state.nextSpawnZ = SPAWN_Z; }
+  if (state.nextSpawnZ > SPAWN_Z + tune.gap + Math.random() * 10) { spawnRow(SPAWN_Z); state.nextSpawnZ = SPAWN_Z; }
 
   const px = player.position.x, pyTop = state.y + (sliding ? 1.0 : 1.9);
   for (const o of obstacles) {
@@ -392,10 +465,10 @@ function tickPlay(dt) {
     if (c.life <= 0) c.mesh.visible = false;
   }
 
-  state.score = Math.floor(state.dist / 2) + state.coinsTaken * 10;
+  state.score = Math.floor(state.dist / tune.distDiv) + state.coinsTaken * 10;
   if (state.score >= state.nextMilestone) { toast(['Hebat! 🌟', 'Wow, terus! 🚀', 'Juara! 🏆'][Math.floor(Math.random() * 3)]); state.nextMilestone += 150; }
   ui.score.textContent = state.score; ui.dist.textContent = Math.floor(state.dist); ui.coins.textContent = state.coinsTaken;
-  ui.gesture.textContent = sliding ? '🙇 MERUNDUK' : state.jumping ? '🦘 LOMPAT' : ['⬅️ KIRI', '🙂 TENGAH', '➡️ KANAN'][state.targetLane];
+  ui.gesture.textContent = sliding ? '🙇 MERUNDUK' : state.diving ? '⬇️ MENUKIK' : state.jumping ? '🦘 LOMPAT' : ['⬅️ KIRI', '🙂 TENGAH', '➡️ KANAN'][state.targetLane];
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +541,31 @@ document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () 
 document.querySelectorAll('.open-shop').forEach((b) => b.addEventListener('click', () => { unlock(); openShop(); }));
 
 // ---------------------------------------------------------------------------
+// Kualitas adaptif: kalau rata-rata frame > 20 ms (≈ di bawah 50 fps), turunkan resolusi bertahap
+// ---------------------------------------------------------------------------
+const perf = { sum: 0, n: 0 };
+function adaptQuality(dt) {
+  if (document.hidden || dt >= .05) return; // abaikan frame saat tab disembunyikan / tersendat sekali
+  perf.sum += dt; perf.n++;
+  if (perf.n < 120) return;
+  const avg = perf.sum / perf.n; perf.sum = 0; perf.n = 0;
+  if (avg > .02 && pixelRatio > 1) {
+    pixelRatio = Math.max(1, pixelRatio - .25);
+    renderer.setPixelRatio(pixelRatio); renderer.setSize(innerWidth, innerHeight);
+  } else if (avg > .02 && renderer.shadowMap.enabled) {
+    renderer.shadowMap.enabled = false; // pilihan terakhir untuk perangkat sangat lemah
+    scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Loop
 // ---------------------------------------------------------------------------
 let last = performance.now();
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now;
+  adaptQuality(raw);
   readPose(now);
   if (state.mode === 'calib') tickCalib(now);
   else if (state.mode === 'play') tickPlay(dt);
@@ -483,8 +575,9 @@ function loop(now) {
     if (input.jump && state.overT > 1.2) beginPlay();
     input.jump = false;
   } else input.jump = false;
+  if (state.mode !== 'play') input.duckEdge = false;
   if (state.mode !== 'pause') {
-    const st = state.mode === 'play' ? (state.jumping ? 'air' : state.sliding ? 'slide' : 'run') : state.mode === 'over' ? 'dizzy' : 'idle';
+    const st = state.mode === 'play' ? (state.jumping ? (state.diving ? 'dive' : 'air') : state.sliding ? 'slide' : 'run') : state.mode === 'over' ? 'dizzy' : 'idle';
     bolu.update(dt, { state: st, speed: state.speed, vy: state.vy, lean: (LANE_X[state.targetLane] - player.position.x) * .2 });
     dust.update(dt, st === 'run', player.position.x, PLAYER_Z);
     if (state.mode !== 'play') clouds.scroll(0, dt);
@@ -499,7 +592,7 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
-if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose };
+if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose, processFrame, renderer, scene, setSkin, beginPlay, get pixelRatio() { return pixelRatio; }, get tune() { return tune; }, get player() { return player; } };
 
 addEventListener('resize', () => { fitCamera(); renderer.setSize(innerWidth, innerHeight); });
 

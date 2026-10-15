@@ -99,7 +99,7 @@ export function addGround(scene) {
 // ---------------------------------------------------------------------------
 // Properti pinggir jalan (masing-masing 1 mesh gabungan)
 // ---------------------------------------------------------------------------
-const S = (w = 18, h = 12) => new THREE.SphereGeometry(1, w, h);
+const S = (w = 12, h = 9) => new THREE.SphereGeometry(1, w, h);
 
 function roundTree() {
   const b = builder(), h = rnd(1.3, 1.9);

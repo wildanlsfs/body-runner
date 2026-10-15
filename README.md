@@ -14,6 +14,13 @@ Game lari 3D **ramah anak** di browser yang dikendalikan **gerakan badan lewat w
 
 Teknologi: [Three.js](https://threejs.org) — dunia kartun prosedural (tanpa file model): toon shading 3 tingkat, garis tepi *inverted hull*, bayangan lembut, Bolu si kue bolu bertopping krim & ceri dengan animasi lari/lompat/merunduk/kedip/pusing, rumah jamur, pagar, peti, gapura bendera. Tiap properti digabung jadi 1 geometri ber-vertex-color supaya ringan di HP. + [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (deteksi pose di perangkat, model *lite* ±3 MB). Suara disintesis dengan WebAudio — tidak ada file audio. Semua pemrosesan terjadi di browser; video tidak pernah dikirim ke server.
 
+## Mekanik
+
+- Dari jongkok bisa langsung lompat. Merunduk saat di udara membuat Bolu menukik turun lalu langsung jongkok begitu mendarat.
+- **Mode kamera lebih santai** dari mode keyboard (kecepatan 8→15 vs 12→26, jarak antar-rintangan 28 m vs 18 m, melayang ±1 dtk), karena gerakan badan lebih lambat dari tombol.
+- **Kunci pemain:** kamera mendeteksi sampai 3 orang, tapi hanya orang yang dikunci saat kalibrasi (paling dekat & di tengah) yang menggerakkan Bolu. Orang yang lewat diabaikan. Kalau pemain hilang lebih dari 1,5 detik, game dijeda.
+- Resolusi turun otomatis kalau perangkat tidak sanggup ±50 fps.
+
 ## Lemari Bolu & power-up
 
 - **Bintang** yang dikumpulkan masuk dompet (disimpan di browser) untuk membuka **7 skin**: Stroberi, Cokelat, Pandan, Ubi Ungu, Keju, Pelangi, dan Juara (khusus: capai skor 1000). Skin bisa dicoba dulu sebelum dibeli. Tidak ada pembelian dengan uang sungguhan dan tidak ada undian.
