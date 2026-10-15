@@ -1,8 +1,8 @@
 // Dunia kartun: langit gradasi, matahari, bukit, jalan batu, pagar, pohon, rumah jamur, rintangan, bintang.
 import * as THREE from 'three';
-import { builder, part, toon, vtoon, canvasTex } from './look.js';
+import { builder, part, toon, vtoon, flatToon, curved, canvasTex } from './look.js';
 
-const cloudMat = new THREE.MeshToonMaterial({ vertexColors: true, emissive: '#eaf6ff', emissiveIntensity: .55 });
+const cloudMat = flatToon({ emissive: '#eaf6ff', emissiveIntensity: .55 });
 
 export const SKY_TOP = '#3aa8ff', SKY_HORIZON = '#d4f3ff';
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -42,14 +42,14 @@ export function addSky(scene) {
   const greens = ['#7fd97a', '#6cc96f', '#93e08a', '#5fbf6a'];
   for (let i = 0; i < 14; i++) {
     const x = (i - 6.5) * 22 + rnd(-6, 6), r = rnd(14, 26);
-    far.add(new THREE.SphereGeometry(1, 20, 12), greens[i % 4], { p: [x, -r * .35, rnd(-150, -175)], s: [r * 1.3, r * .75, r * .6] });
+    far.add(new THREE.SphereGeometry(1, 20, 12), greens[i % 4], { p: [x, -r * .55 - 4, rnd(-150, -175)], s: [r * 1.3, r * .7, r * .6] });
   }
   for (let i = 0; i < 7; i++) {
     const x = (i - 3) * 40 + rnd(-10, 10), h = rnd(35, 55), z = rnd(-195, -210), ry = rnd(0, 1);
     far.add(new THREE.ConeGeometry(h * .7, h, 7), i % 2 ? '#a99be6' : '#b9aef0', { p: [x, h / 2 - 6, z], r: [0, ry, 0] });
     far.add(new THREE.ConeGeometry(h * .7 * .36 + .4, h * .36, 7), '#ffffff', { p: [x, h - 6 - h * .18 + .15, z], r: [0, ry, 0] }); // salju
   }
-  const farMesh = far.mesh({ outline: 0, cast: false });
+  const farMesh = far.mesh({ outline: 0, cast: false, material: flatToon() });
   scene.add(farMesh);
   return { dir };
 }
@@ -68,7 +68,7 @@ export function addGround(scene) {
     for (let i = 0; i < 90; i++) { const x = Math.random() * 256, y = Math.random() * 256; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 2, y - 7); g.moveTo(x + 3, y); g.lineTo(x + 4, y - 6); g.stroke(); }
     for (let i = 0; i < 14; i++) { const x = Math.random() * 256, y = Math.random() * 256; g.fillStyle = pick(['#ffffff', '#ffe066', '#ffb3c7']); for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(x + Math.cos(k * 1.26) * 3, y + Math.sin(k * 1.26) * 3, 2.4, 0, 7); g.fill(); } g.fillStyle = '#ffb703'; g.beginPath(); g.arc(x, y, 1.8, 0, 7); g.fill(); }
   }, [40, 40]);
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshToonMaterial({ map: grassTex }));
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(400, 400, 24, 120), curved(new THREE.MeshToonMaterial({ map: grassTex })));
   grass.rotation.x = -Math.PI / 2; grass.position.set(0, -0.02, -110); grass.receiveShadow = true; scene.add(grass);
 
   // jalan batu bulat pastel; garis jalur berupa titik putih
@@ -82,17 +82,18 @@ export function addGround(scene) {
     }
     g.fillStyle = '#ffffff'; for (const x of [85, 171]) for (let y = 16; y < 256; y += 64) { g.beginPath(); g.roundRect(x - 5, y, 10, 30, 5); g.fill(); }
   }, [1, 36]);
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 260), new THREE.MeshToonMaterial({ map: roadTex }));
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 260, 1, 130), curved(new THREE.MeshToonMaterial({ map: roadTex })));
   road.rotation.x = -Math.PI / 2; road.position.set(0, 0, -110); road.receiveShadow = true; scene.add(road);
 
   // trotoar garis permen
   const curbTex = canvasTex(64, 64, (g) => { g.fillStyle = '#fff4e2'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#ff7aa2'; g.fillRect(0, 0, 64, 32); }, [1, 130]);
-  const curbMat = new THREE.MeshToonMaterial({ map: curbTex });
+  const curbMat = curved(new THREE.MeshToonMaterial({ map: curbTex }));
   for (const sx of [-1, 1]) {
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(.45, .22, 260), curbMat);
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(.45, .22, 260, 1, 1, 130), curbMat);
     curb.position.set(sx * 3.92, .11, -110); curb.receiveShadow = true; scene.add(curb);
   }
-  return { scroll(dz) { roadTex.offset.y -= dz / (260 / 36); grassTex.offset.y -= dz / 10; curbTex.offset.y -= dz / 2; } };
+  // v=1 ada di ujung jauh (−z): offset harus BERTAMBAH supaya tekstur mengalir ke arah kamera, searah dengan pohon & rintangan
+  return { scroll(dz) { roadTex.offset.y += dz / (260 / 36); grassTex.offset.y += dz / 10; curbTex.offset.y += dz / 2; } };
 }
 
 // ---------------------------------------------------------------------------

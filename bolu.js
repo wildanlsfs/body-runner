@@ -1,7 +1,7 @@
 // Bolu: maskot kue bolu merah muda dengan topping krim, ceri, dan meses.
 // Dirakit prosedural (tanpa file model) + animasi prosedural: lari, lompat, merunduk, kedip, pusing.
 import * as THREE from 'three';
-import { builder, part, toon, INK } from './look.js';
+import { builder, part, toon, curved, INK } from './look.js';
 
 const PINK = '#ff8fb1', PINK_DARK = '#f2709a', CREAM = '#fff4e2', SHOE = '#7b61ff';
 
@@ -72,13 +72,13 @@ export function createBolu() {
   const mouth = new THREE.Group(); mouth.position.set(0, -.13, .705); mouth.rotation.x = .18; body.add(mouth);
   {
     const s = new THREE.Shape(); s.moveTo(-.11, 0); s.lineTo(.11, 0); s.quadraticCurveTo(.1, -.15, 0, -.15); s.quadraticCurveTo(-.1, -.15, -.11, 0);
-    mouth.add(new THREE.Mesh(new THREE.ShapeGeometry(s, 12), new THREE.MeshBasicMaterial({ color: '#5a1d3c' })));
-    const tg = new THREE.Mesh(new THREE.CircleGeometry(.055, 16), new THREE.MeshBasicMaterial({ color: '#ff6f91' }));
+    mouth.add(new THREE.Mesh(new THREE.ShapeGeometry(s, 12), curved(new THREE.MeshBasicMaterial({ color: '#5a1d3c' }))));
+    const tg = new THREE.Mesh(new THREE.CircleGeometry(.055, 16), curved(new THREE.MeshBasicMaterial({ color: '#ff6f91' })));
     tg.position.set(0, -.105, .003); tg.scale.y = .6; mouth.add(tg);
   }
   // pipi merona
   for (const sx of [-1, 1]) {
-    const c = new THREE.Mesh(new THREE.CircleGeometry(.075, 18), new THREE.MeshBasicMaterial({ color: '#ff5c8a', transparent: true, opacity: .45, depthWrite: false }));
+    const c = new THREE.Mesh(new THREE.CircleGeometry(.075, 18), curved(new THREE.MeshBasicMaterial({ color: '#ff5c8a', transparent: true, opacity: .45, depthWrite: false })));
     c.position.set(sx * .41, -.07, .585); c.rotation.y = sx * .62; c.scale.y = .7; body.add(c);
   }
 

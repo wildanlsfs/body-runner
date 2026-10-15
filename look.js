@@ -5,6 +5,32 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const INK = '#3b2347';
 
+// ---------------------------------------------------------------------------
+// Dunia melengkung: hanya posisi di layar (gl_Position) yang dibengkokkan; posisi dunia untuk
+// cahaya & bayangan tetap lurus, jadi bayangan tetap pas. Makin jauh dari kamera, makin turun
+// (cakrawala membulat) dan bergeser ke samping (jalan tampak berbelok).
+// ---------------------------------------------------------------------------
+export const curve = { uCurve: { value: 0.0016 }, uBendX: { value: 0 } };
+THREE.ShaderChunk.common += '\n#ifdef CURVED\nuniform float uCurve;\nuniform float uBendX;\n#endif\n';
+THREE.ShaderChunk.project_vertex += `
+#ifdef CURVED
+{
+  vec4 cw = modelMatrix * vec4( transformed, 1.0 );
+  float d = min( cw.z - cameraPosition.z, 0.0 );
+  cw.y -= uCurve * d * d;
+  cw.x += uBendX * d * d;
+  gl_Position = projectionMatrix * viewMatrix * cw;
+}
+#endif
+`;
+/** Ikutkan material ke efek dunia melengkung. */
+export function curved(m) {
+  m.defines = { ...(m.defines || {}), CURVED: '' };
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => { prev.call(m, sh, r); Object.assign(sh.uniforms, curve); };
+  return m;
+}
+
 const ramp = (() => {
   const t = new THREE.DataTexture(new Uint8Array([110, 190, 255]), 3, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
@@ -14,29 +40,33 @@ const cache = new Map();
 /** Material toon bersama per warna. */
 export function toon(color, extra = {}) {
   const key = color + JSON.stringify(extra);
-  if (!cache.has(key)) cache.set(key, new THREE.MeshToonMaterial({ color, gradientMap: ramp, ...extra }));
+  if (!cache.has(key)) cache.set(key, curved(new THREE.MeshToonMaterial({ color, gradientMap: ramp, ...extra })));
   return cache.get(key);
 }
-export const vtoon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp });
+export const vtoon = curved(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp }));
+/** Versi tidak melengkung untuk latar jauh (gunung, awan). */
+export const flatToon = (extra = {}) => new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp, ...extra });
 
 const inkCache = new Map();
 /** Material garis tepi: permukaan belakang yang didorong keluar sepanjang normal. */
-function inkMat(thick) {
-  if (!inkCache.has(thick)) {
+function inkMat(thick, bend) {
+  const key = thick + (bend ? 'c' : 'f');
+  if (!inkCache.has(key)) {
     const m = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
     m.onBeforeCompile = (s) => {
       s.uniforms.thick = { value: thick };
       s.vertexShader = 'uniform float thick;\n' + s.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * thick;');
     };
     m.customProgramCacheKey = () => 'ink';
-    inkCache.set(thick, m);
+    inkCache.set(key, bend ? curved(m) : m);
   }
-  return inkCache.get(thick);
+  return inkCache.get(key);
 }
 
-/** Tambahkan garis tepi ke mesh (sebagai anak, ikut transformasinya). */
+/** Tambahkan garis tepi ke mesh (sebagai anak, ikut transformasinya). Ikut melengkung bila mesh-nya melengkung. */
 export function ink(mesh, thick = 0.035) {
-  const o = new THREE.Mesh(mesh.geometry, inkMat(thick));
+  const bend = !!(mesh.material.defines && 'CURVED' in mesh.material.defines);
+  const o = new THREE.Mesh(mesh.geometry, inkMat(thick, bend));
   o.raycast = () => {};
   mesh.add(o);
   return mesh;

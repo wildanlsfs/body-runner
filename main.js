@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sfx, unlock, setMuted, isMuted } from './audio.js';
 import { createBolu } from './bolu.js';
+import { curve, curved } from './look.js';
 import { SKY_HORIZON, addSky, addGround, makeScenery, makeClouds, makeObstacles, makeCoins, makeDust } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ function fitCamera() {
   camera.aspect = a; camera.fov = 55 + portrait * 17;
   camera.position.set(camera.position.x, 3.3 + portrait * 1.2, 7.2 + portrait * 2.6);
   camera.lookAt(camera.position.x, 1.3, -10); camera.updateProjectionMatrix();
+  curve.uCurve.value = .0016 * (1 - portrait * .4); // kamera lebih mundur → lengkung dikurangi agar jarak pandang sama
 }
 fitCamera();
 
@@ -68,7 +70,7 @@ const coins = makeCoins(scene);
 const confetti = [];
 {
   const geo = new THREE.PlaneGeometry(.16, .22);
-  const mats = ['#ff8fab', '#ffd166', '#5bd77a', '#5ec8ff', '#ff9f43'].map((c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+  const mats = ['#ff8fab', '#ffd166', '#5bd77a', '#5ec8ff', '#ff9f43'].map((c) => curved(new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })));
   for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(geo, mats[i % 5]); m.visible = false; scene.add(m); confetti.push({ mesh: m, v: new THREE.Vector3(), life: 0 }); }
 }
 function burst(x, y, z, n = 14) {
@@ -252,6 +254,8 @@ function tickPlay(dt, now) {
   player.position.y = state.y;
 
   ground.scroll(dz);
+  // jalan pelan-pelan tampak berbelok kiri-kanan (visual saja; jalur permainan tetap lurus)
+  curve.uBendX.value = Math.sin(state.dist * .016) * .0012;
   scenery.scroll(dz);
   clouds.scroll(dz, dt);
   state.nextSpawnZ += dz;
