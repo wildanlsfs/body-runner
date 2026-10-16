@@ -81,7 +81,7 @@ h2 { margin: 0 0 6px; font-size: 28px; font-weight: 700; }
 .sheet header h2 { margin-right: auto; }
 .sheet header .round { box-shadow: none; border-color: #eee6f3; }
 .sheet h2 { margin: 0; font-size: 24px; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border-radius: 16px; background: #eef7ff; margin-bottom: 12px; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 16px; background: #eef7ff; margin-bottom: 12px; }
 .tab { padding: 9px; border: 0; border-radius: 12px; background: transparent; font: inherit; font-weight: 700; font-size: 15px; color: var(--muted); cursor: pointer; }
 .tab.on { background: #fff; color: var(--ink); box-shadow: 0 4px 10px -6px rgba(42,26,58,.4); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin-bottom: 14px; }
@@ -156,3 +156,48 @@ h2 { margin: 0 0 6px; font-size: 28px; font-weight: 700; }
   .card, .mascot { animation: none; }
   .pill.gesture, #toast, .btn { transition: none; }
 }
+
+/* progres: level, misi harian, prestasi */
+.btn.chip.ach-btn { background: #fff4c2; border-color: #ffe08a; }
+.prog { margin: 0 0 14px;
+   padding: 12px 14px; border-radius: 20px; background: #f4f0ff; border: 2px solid #e4dcff; text-align: left; }
+.prog h3 { margin: 10px 0 6px; font-size: 15px; }
+.lvl { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.lvl b { font-size: 18px; }
+.lvl small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.bar.xp, .missions .bar, .ach-list .bar, .xp-row .bar { display: block; height: 10px; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--green), #9cf0b0); transition: width .4s; }
+.bar.xp i { background: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
+.next { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.next b { color: var(--ink); }
+.missions { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.missions li { display: grid; grid-template-columns: 1fr 70px; grid-template-areas: "t b" "s s"; gap: 2px 8px; align-items: center; padding: 7px 10px; border-radius: 14px; background: #fff; border: 2px solid #ece6ff; font-size: 13px; font-weight: 600; }
+.missions li span:first-child { grid-area: t; }
+.missions li .bar { grid-area: b; }
+.missions li small { grid-area: s; font-size: 11px; color: var(--muted); }
+.missions li.done { background: #eafbea; border-color: #c7efcc; }
+.missions li.bonus { display: block; text-align: center; color: #1d6b33; }
+.over-prog { margin: -4px 0 12px; display: grid; gap: 6px; text-align: left; }
+.xp-row { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px; font-size: 14px; }
+.xp-row .lv { font-weight: 700; }
+.xp-row small { color: var(--muted); font-size: 12px; }
+.gain { margin: 0; padding: 7px 10px; border-radius: 12px; background: #fff7d6; font-size: 14px; font-weight: 600; }
+.gain.lvup { background: #efe7ff; }
+.gain.rest { background: #e6f6ff; }
+.ach-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; text-align: left; max-height: 55vh; overflow-y: auto; }
+.ach-list li { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 16px; background: #fff; border: 2px solid #eee6f3; }
+.ach-list li.done { background: #fff8e1; border-color: #ffe08a; }
+.ach-list li.stat { display: block; text-align: center; font-size: 13px; color: var(--muted); background: #f4f0ff; border-color: #e4dcff; }
+.ach-list .ic { font-size: 28px; text-align: center; }
+.ach-list b { display: block; font-size: 15px; margin-bottom: 4px; }
+.ach-list small { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.skin .ti { display: grid; place-items: center; width: 52px; height: 52px; font-size: 32px; border-radius: 50%; background: #f4f0ff; border: 3px solid var(--ink); }
+.skin.locked .ti { filter: grayscale(.7); opacity: .7; }
+@media (max-width: 640px) {
+  .row { gap: 6px; }
+  .row .wallet { padding: 7px 10px; font-size: 16px; }
+  .row .btn.chip { padding: 9px 10px; font-size: 14px; }
+  .missions li { grid-template-columns: 1fr 54px; font-size: 12.5px; }
+}
+
+.prog.after { margin: 14px 0 0; }

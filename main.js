@@ -3,7 +3,8 @@ import { sfx, unlock, setMuted, isMuted, music } from './audio.js';
 import { createBolu } from './bolu.js';
 import { curve, curved } from './look.js';
 import { SKY_HORIZON, addSky, addGround, makeScenery, makeClouds, makeObstacles, makeCoins, makeDust, makePowerUps, makeShieldBubble } from './world.js';
-import { SKINS, TOPPER_ICON, POWERS, UP_PRICES, powerDuration, save, persist, skinById, isOwned } from './skins.js';
+import { SKINS, TRAILS, TOPPER_ICON, POWERS, UP_PRICES, UP_MAX, powerDuration, save, persist, skinById, trailById, isOwned, ownsTrail } from './skins.js';
+import { LEVEL_MAX, xpNeed, daily, missionText, missionValue, newlyReached, endRun, nextUnlock, ACH, MEDAL, checkAchievements } from './progress.js';
 
 // ---------------------------------------------------------------------------
 // Konstanta
@@ -29,7 +30,8 @@ const ui = {
   final: $('final'), finalBest: $('final-best'), overTitle: $('over-title'), stars: $('stars'), earned: $('earned'), unlockHint: $('unlock-hint'),
   calibCount: $('calib-count'), calibBar: $('calib-bar'), calibHint: $('calib-hint'),
   pauseMsg: $('pause-msg'), camStatus: $('cam-status'), video: $('video'), poseCanvas: $('pose'), mute: $('btn-mute'),
-  skinList: $('skin-list'), upList: $('up-list'), shopDone: $('btn-shop-done'),
+  skinList: $('skin-list'), trailList: $('trail-list'), upList: $('up-list'), shopDone: $('btn-shop-done'),
+  overProg: $('over-prog'), lvN: $('lv-n'), xpBar: $('xp-bar'), xpTxt: $('xp-txt'), missions: $('missions'), next: $('next-unlock'), ach: $('ach'), achList: $('ach-list'),
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,54 @@ function setSkin(id) {
   player.position.copy(pos); player.add(shieldBubble); scene.add(player);
 }
 setSkin(save.skin);
+
+// Jejak: emoji kecil (sprite dari kanvas) yang beterbangan di belakang Bolu
+const trail = (() => {
+  const texCache = new Map();
+  const texOf = (icon) => {
+    if (!texCache.has(icon)) {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d'); g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '50px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; g.fillText(icon, 32, 36);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; texCache.set(icon, t);
+    }
+    return texCache.get(icon);
+  };
+  const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false });
+  const pool = Array.from({ length: 28 }, () => { const s = new THREE.Sprite(mat.clone()); s.visible = false; scene.add(s); return { s, life: 0, v: new THREE.Vector3() }; });
+  let icon = null, acc = 0;
+  return {
+    set(id) { const t = trailById(id); icon = t.id === 'none' ? null : t.icon; if (icon) { const tex = texOf(icon); pool.forEach((p) => { p.s.material.map = tex; p.s.material.needsUpdate = true; }); } else pool.forEach((p) => { p.life = 0; p.s.visible = false; }); },
+    update(dt, emit, pos, shop) {
+      if (icon && emit && !REDUCED) {
+        acc += dt;
+        if (acc > (shop ? .16 : .07)) {
+          acc = 0; const p = pool.find((q) => q.life <= 0);
+          if (p) {
+            p.life = .8; p.s.visible = true;
+            if (shop) { // di lemari: beterbangan di samping Bolu (yang menghadap kamera) supaya terlihat
+              const side = Math.random() < .5 ? -1 : 1;
+              p.s.position.set(pos.x + side * (.85 + Math.random() * .5), .3 + Math.random() * 1.2, .4);
+              p.v.set(side * (.2 + Math.random() * .4), .6 + Math.random() * .6, 0);
+            } else {
+              const side = Math.random() < .5 ? -1 : 1;           // dari sisi kiri/kanan, tidak menutupi badan Bolu
+              p.s.position.set(pos.x + side * (.55 + Math.random() * .4), pos.y + .15 + Math.random() * .7, PLAYER_Z + .7);
+              p.v.set(side * (.3 + Math.random() * .5), .3 + Math.random() * .6, 3 + Math.random() * 2);
+            }
+          }
+        }
+      }
+      for (const p of pool) {
+        if (p.life <= 0) continue;
+        p.life -= dt; p.s.position.addScaledVector(p.v, dt);
+        const k = Math.max(0, p.life / .8); p.s.scale.setScalar(.4 * Math.sin(Math.min(1, k * 1.4) * Math.PI * .5 + .2)); p.s.material.opacity = Math.min(1, k * 2);
+        if (p.life <= 0) p.s.visible = false;
+      }
+    },
+  };
+})();
+const setTrail = (id) => trail.set(id);
+setTrail(save.trail);
 
 // Rintangan (tumpukan peti / batu, batang kayu, gapura bendera), bintang & power-up — pool
 const obstacles = makeObstacles(scene);
@@ -284,7 +334,11 @@ function toast(msg, ms = 1100) { ui.toast.textContent = msg; ui.toast.classList.
 function refreshWallet() { document.querySelectorAll('.wallet-n').forEach((el) => (el.textContent = save.wallet)); }
 refreshWallet();
 
+// statistik gerak satu putaran (untuk misi, XP, prestasi)
+const run = { jumps: 0, ducks: 0, dives: 0, powers: 0, lanes: 0 };
+const announced = new Set();
 function resetRun() {
+  Object.assign(run, { jumps: 0, ducks: 0, dives: 0, powers: 0, lanes: 0 }); announced.clear();
   Object.assign(state, { speed: tune.base, dist: 0, score: 0, coinsTaken: 0, targetLane: 1, vy: 0, y: 0, jumping: false, diving: false, slideOnLand: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100, invuln: 0 });
   state.pw = { magnet: 0, shield: 0, double: 0 };
   input.lane = 1; input.jump = false; input.duck = false; input.duckEdge = false;
@@ -318,14 +372,16 @@ function gameOver() {
   state.pw = { magnet: 0, shield: 0, double: 0 }; renderPowers();
   const record = state.score > state.best;
   if (record) { state.best = state.score; try { localStorage.setItem('bolu.best', String(state.best)); } catch {} }
-  // bintang masuk dompet; cek skin yang baru bisa dibuka
+  // bintang masuk dompet; lalu misi, XP/level, dan prestasi
   save.wallet += state.coinsTaken; save.bestRun = Math.max(save.bestRun, state.score); persist();
-  const goalUnlocked = SKINS.find((s) => s.goal && isOwned(s) && !save.owned.includes(s.id));
-  if (goalUnlocked) { save.owned.push(goalUnlocked.id); persist(); }
-  const affordable = SKINS.find((s) => !isOwned(s) && s.price && s.price <= save.wallet);
-  ui.unlockHint.hidden = !goalUnlocked && !affordable;
-  ui.unlockHint.textContent = goalUnlocked ? `Skin ${goalUnlocked.name} ${TOPPER_ICON[goalUnlocked.topper]} terbuka! Coba di Lemari.` : affordable ? `Bintangmu cukup untuk skin ${affordable.name} ${TOPPER_ICON[affordable.topper]}!` : '';
-  ui.earned.textContent = state.coinsTaken; refreshWallet();
+  const res = endRun(runSnapshot());
+  sessionSec += state.elapsed;
+  renderOverProgress(res);
+  const affordable = SKINS.find((s) => !isOwned(s) && s.price && s.price <= save.wallet) || TRAILS.find((t) => !ownsTrail(t) && t.price && t.price <= save.wallet);
+  ui.unlockHint.hidden = !affordable;
+  ui.unlockHint.textContent = affordable ? `Bintangmu cukup untuk ${affordable.icon ? 'jejak' : 'skin'} ${affordable.name} ${affordable.icon || TOPPER_ICON[affordable.topper]}!` : '';
+  ui.earned.textContent = state.coinsTaken; refreshWallet(); renderProgress();
+  if (res.levels.length) { sfx.cheer(); burst(player.position.x, 2, 0, 40); }
 
   ui.final.textContent = state.score; ui.finalBest.textContent = state.best; ui.best.textContent = state.best;
   const s = state.score; const n = s >= 600 ? 3 : s >= 250 ? 2 : s >= 80 ? 1 : 0;
@@ -335,6 +391,42 @@ function gameOver() {
   show(ui.over, true);
 }
 
+function runSnapshot() { return { dist: state.dist, coins: state.coinsTaken, score: state.score, sec: state.elapsed, ...run }; }
+let sessionSec = 0, breakShownAt = 0;
+function renderOverProgress(res) {
+  const rows = [];
+  rows.push(`<div class="xp-row"><b>+${res.xp} XP</b>${levelBar()}</div>`);
+  for (const l of res.levels) rows.push(`<p class="gain lvup">⬆️ Naik ke <b>Level ${l.level}</b>! +${l.stars} ⭐${l.unlocks.map((u) => ` · ${u.kind === 'skin' ? 'skin' : 'jejak'} <b>${u.name}</b> ${u.icon || TOPPER_ICON[u.topper]} terbuka`).join('')}</p>`);
+  for (const m of res.missions) rows.push(`<p class="gain">🎯 ${missionText(m)} · +${m.reward} ⭐</p>`);
+  if (res.bonus) rows.push(`<p class="gain">🎁 Semua misi hari ini selesai! +${res.bonus} ⭐</p>`);
+  for (const a of res.ach) rows.push(`<p class="gain">${MEDAL[a.tier]} Prestasi ${a.name} · +${a.stars} ⭐</p>`);
+  // pengingat sehat: tiap 20 menit bergerak dalam satu sesi
+  if (sessionSec - breakShownAt >= 20 * 60) { breakShownAt = sessionSec; rows.push(`<p class="gain rest">💧 Kamu sudah bergerak ${Math.round(sessionSec / 60)} menit. Istirahat & minum air dulu ya!</p>`); }
+  ui.overProg.innerHTML = rows.join('');
+}
+const levelBar = () => {
+  const max = save.level >= LEVEL_MAX, need = xpNeed(save.level), pct = max ? 100 : Math.min(100, save.xp / need * 100);
+  return `<span class="lv">Lv ${save.level}</span><span class="bar xp"><i style="width:${pct}%"></i></span><small>${max ? 'MAKS' : `${save.xp}/${need}`}</small>`;
+};
+/** Kartu progres di layar awal: level, misi hari ini, hadiah berikutnya. */
+function renderProgress() {
+  const max = save.level >= LEVEL_MAX, need = xpNeed(save.level);
+  ui.lvN.textContent = save.level; ui.xpBar.style.width = `${max ? 100 : Math.min(100, save.xp / need * 100)}%`;
+  ui.xpTxt.textContent = max ? 'Level maksimal 🏆' : `${save.xp} / ${need} XP`;
+  const D = daily();
+  ui.missions.innerHTML = D.list.map((m) => {
+    const v = Math.min(m.n, missionValue(m)), done = D.done.includes(m.id);
+    return `<li class="${done ? 'done' : ''}"><span>${done ? '✅' : '🎯'} ${missionText(m)}</span><span class="bar"><i style="width:${v / m.n * 100}%"></i></span><small>${done ? 'selesai' : `${Math.floor(v).toLocaleString('id-ID')}/${m.n.toLocaleString('id-ID')} · +${m.reward}⭐`}</small></li>`;
+  }).join('') + (D.bonus ? '<li class="done bonus">🎁 Semua misi selesai — sampai jumpa besok!</li>' : '');
+  const nu = nextUnlock();
+  ui.next.innerHTML = nu ? `Level ${nu.level}: ${nu.item.kind === 'skin' ? 'skin' : 'jejak'} <b>${nu.item.name}</b> ${nu.item.icon || TOPPER_ICON[nu.item.topper]}` : 'Semua hadiah level sudah terbuka 🏆';
+}
+function renderAch() {
+  ui.achList.innerHTML = ACH.map((a) => {
+    const t = save.ach[a.id] || 0, v = a.value(), goal = a.tiers[Math.min(t, a.tiers.length - 1)], done = t >= a.tiers.length;
+    return `<li class="${done ? 'done' : ''}"><span class="ic">${a.icon}</span><div><b>${a.name} ${MEDAL[t] || ''}</b><span class="bar"><i style="width:${done ? 100 : Math.min(100, v / goal * 100)}%"></i></span><small>${done ? 'Emas! Semua tingkat selesai' : `${Math.floor(v).toLocaleString('id-ID')} / ${goal.toLocaleString('id-ID')} ${a.unit} · +${a.reward[t]} ⭐`}</small></div></li>`;
+  }).join('') + `<li class="stat">📅 ${save.days} hari bermain · 🏃 ${Math.round(save.life.dist / 1000)} km · ⏱️ ${Math.round(save.life.playSec / 60)} menit bergerak</li>`;
+}
 function togglePause() {
   if (state.mode === 'play') { state.mode = 'pause'; show(ui.pause, true); music.pause(); }
   else if (state.mode === 'pause') {
@@ -359,7 +451,7 @@ function renderPowers() {
   shieldBubble.visible = state.pw.shield > 0;
 }
 function grantPower(type) {
-  state.pw[type] = powerDuration(save.up[type]);
+  state.pw[type] = powerDuration(save.up[type]); if (state.mode === 'play') run.powers++;
   sfx.power(); toast(`${POWERS[type].icon} ${POWERS[type].name}!`); burst(player.position.x, 1.6, 0, 12);
   renderPowers();
 }
@@ -391,21 +483,21 @@ function tickPlay(dt) {
   music.setTempo(116 + (state.speed - tune.base) / (tune.max - tune.base) * 28); // musik makin cepat bersama Bolu
   const dz = state.speed * dt; state.dist += dz;
 
-  if (input.lane !== state.targetLane) { state.targetLane = input.lane; sfx.lane(); }
+  if (input.lane !== state.targetLane) { state.targetLane = input.lane; sfx.lane(); run.lanes++; }
   player.position.x += (LANE_X[state.targetLane] - player.position.x) * Math.min(1, dt * tune.laneLerp);
 
   // lompat — boleh langsung dari jongkok (jongkok dibatalkan)
-  if (input.jump && !state.jumping) { state.vy = tune.jumpV; state.jumping = true; state.diving = false; state.slideOnLand = false; state.slide = 0; sfx.jump(); }
+  if (input.jump && !state.jumping) { state.vy = tune.jumpV; state.jumping = true; state.diving = false; state.slideOnLand = false; state.slide = 0; sfx.jump(); run.jumps++; }
   input.jump = false;
   // merunduk saat di udara → menukik turun, lalu langsung jongkok begitu mendarat
-  if (input.duckEdge && state.jumping && !state.diving) { state.diving = true; state.slideOnLand = true; state.vy = Math.min(state.vy, -tune.jumpV * 1.2); sfx.duck(); }
+  if (input.duckEdge && state.jumping && !state.diving) { state.diving = true; state.slideOnLand = true; state.vy = Math.min(state.vy, -tune.jumpV * 1.2); sfx.duck(); run.dives++; run.ducks++; }
   if (state.jumping) {
     state.vy += tune.gravity * (state.diving ? 2.2 : 1) * dt; state.y += state.vy * dt;
     if (state.y <= 0) {
       state.y = 0; state.jumping = false; state.diving = false; state.vy = 0; dust.puff(player.position.x, PLAYER_Z, 6, .6);
       if (state.slideOnLand) { state.slideOnLand = false; state.slide = tune.slide; }
     }
-  } else if (input.duckEdge && state.slide <= 0) { state.slide = tune.slide; sfx.duck(); }
+  } else if (input.duckEdge && state.slide <= 0) { state.slide = tune.slide; sfx.duck(); run.ducks++; }
   input.duckEdge = false;
   if (state.slide > 0) state.slide -= dt;
   const sliding = !state.jumping && (state.slide > 0 || input.duck);
@@ -471,6 +563,10 @@ function tickPlay(dt) {
   }
 
   state.score = Math.floor(state.dist / tune.distDiv) + state.coinsTaken * 10;
+  if ((state.missionT = (state.missionT || 0) + dt) > .5) {
+    state.missionT = 0;
+    for (const m of newlyReached(runSnapshot(), announced)) { announced.add(m.id); sfx.cheer(); toast(`🎯 Misi selesai: ${missionText(m)}!`, 1800); }
+  }
   if (state.score >= state.nextMilestone) { toast(['Hebat! 🌟', 'Wow, terus! 🚀', 'Juara! 🏆'][Math.floor(Math.random() * 3)]); state.nextMilestone += 150; }
   ui.score.textContent = state.score; ui.dist.textContent = Math.floor(state.dist); ui.coins.textContent = state.coinsTaken;
   ui.gesture.textContent = sliding ? '🙇 MERUNDUK' : state.diving ? '⬇️ MENUKIK' : state.jumping ? '🦘 LOMPAT' : ['⬅️ KIRI', '🙂 TENGAH', '➡️ KANAN'][state.targetLane];
@@ -479,42 +575,48 @@ function tickPlay(dt) {
 // ---------------------------------------------------------------------------
 // Lemari Bolu: skin & upgrade
 // ---------------------------------------------------------------------------
-let preview = save.skin, shopTab = 'skins';
+let preview = save.skin, previewTrail = save.trail, shopTab = 'skins';
 function openShop() {
   state.shopFrom = state.mode === 'over' ? 'over' : 'start';
-  state.mode = 'shop'; preview = save.skin;
+  state.mode = 'shop'; preview = save.skin; previewTrail = save.trail;
   show(ui.start, false); show(ui.over, false); show(ui.hud, false); show(ui.shop, true);
   bolu.setMood('happy'); player.position.set(0, 0, PLAYER_Z); state.y = 0; state.jumping = false;
   renderShop();
 }
 function closeShop() {
   if (preview !== save.skin) setSkin(save.skin);
+  previewTrail = save.trail; setTrail(save.trail);
   show(ui.shop, false);
   state.mode = state.shopFrom;
-  if (state.shopFrom === 'over') { show(ui.over, true); show(ui.hud, true); refreshWallet(); ui.unlockHint.hidden = true; } else show(ui.start, true);
+  if (state.shopFrom === 'over') { show(ui.over, true); show(ui.hud, true); refreshWallet(); ui.unlockHint.hidden = true; } else { show(ui.start, true); renderProgress(); }
 }
 function renderShop() {
   refreshWallet();
-  show(ui.skinList, shopTab === 'skins'); show(ui.upList, shopTab === 'ups');
-  $('btn-shop-close').addEventListener('click', closeShop);
-addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.mode === 'shop') closeShop(); });
-document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === shopTab));
+  show(ui.skinList, shopTab === 'skins'); show(ui.trailList, shopTab === 'trails'); show(ui.upList, shopTab === 'ups');
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === shopTab));
   ui.skinList.innerHTML = SKINS.map((s) => {
     const owned = isOwned(s), equipped = s.id === save.skin;
-    const label = equipped ? 'Dipakai ✓' : owned ? 'Pakai' : s.goal ? `Skor ${s.goal}` : `⭐ ${s.price}`;
-    const cls = ['skin', s.id === preview ? 'sel' : '', owned ? '' : 'locked', !owned && s.price > save.wallet ? 'cant' : ''].join(' ');
+    const label = equipped ? 'Dipakai ✓' : owned ? 'Pakai' : s.level ? `Level ${s.level}` : `⭐ ${s.price}`;
+    const cls = ['skin', s.id === preview ? 'sel' : '', owned ? '' : 'locked', !owned && (s.level || s.price > save.wallet) ? 'cant' : ''].join(' ');
     return `<button class="${cls}" data-id="${s.id}" style="--cream:${s.cream}"><span class="sw" style="background:${s.body}"><em>${TOPPER_ICON[s.topper]}</em></span><b>${s.name}</b><small>${owned ? '' : '🔒 '}${label}</small></button>`;
+  }).join('');
+  ui.trailList.innerHTML = TRAILS.map((t) => {
+    const owned = ownsTrail(t), equipped = t.id === save.trail;
+    const label = equipped ? 'Dipakai ✓' : owned ? 'Pakai' : t.level ? `Level ${t.level}` : `⭐ ${t.price}`;
+    const cls = ['skin', 'trail', t.id === previewTrail ? 'sel' : '', owned ? '' : 'locked', !owned && (t.level || t.price > save.wallet) ? 'cant' : ''].join(' ');
+    return `<button class="${cls}" data-trail="${t.id}"><span class="ti">${t.icon}</span><b>${t.name}</b><small>${owned ? '' : '🔒 '}${label}</small></button>`;
   }).join('');
   ui.upList.innerHTML = Object.entries(POWERS).map(([k, p]) => {
     const lv = save.up[k], price = UP_PRICES[lv];
     const btn = price == null ? '<button disabled>Maks</button>' : `<button data-up="${k}" ${price > save.wallet ? 'disabled' : ''}>⭐ ${price}</button>`;
-    return `<div class="up"><span class="ic">${p.icon}</span><div><b>${p.name} · ${powerDuration(lv)} dtk</b><small>${p.desc}</small><div class="lv">${[0, 1, 2].map((i) => `<span class="${i < lv ? 'on' : ''}"></span>`).join('')}</div></div>${btn}</div>`;
+    return `<div class="up"><span class="ic">${p.icon}</span><div><b>${p.name} · ${powerDuration(lv)} dtk</b><small>${p.desc}</small><div class="lv">${Array.from({ length: UP_MAX }, (_, i) => `<span class="${i < lv ? 'on' : ''}"></span>`).join('')}</div></div>${btn}</div>`;
   }).join('');
   // tombol utama: beli skin yang sedang dicoba, atau selesai
-  const ps = skinById(preview);
-  if (shopTab === 'skins' && !isOwned(ps)) {
-    ui.shopDone.textContent = ps.goal ? `Capai skor ${ps.goal} untuk membuka` : ps.price <= save.wallet ? `Beli ${ps.name} · ⭐ ${ps.price}` : `Kurang ⭐ ${ps.price - save.wallet}`;
-    ui.shopDone.dataset.buy = ps.goal || ps.price > save.wallet ? '' : ps.id;
+  const ps = skinById(preview), pt = trailById(previewTrail);
+  const item = shopTab === 'skins' && !isOwned(ps) ? ps : shopTab === 'trails' && !ownsTrail(pt) ? pt : null;
+  if (item) {
+    ui.shopDone.textContent = item.level ? `Capai Level ${item.level} untuk membuka (sekarang Lv ${save.level})` : item.price <= save.wallet ? `Beli ${item.name} · ⭐ ${item.price}` : `Kurang ⭐ ${item.price - save.wallet}`;
+    ui.shopDone.dataset.buy = item.level || item.price > save.wallet ? '' : (item.icon ? 'trail:' : 'skin:') + item.id;
     ui.shopDone.disabled = !ui.shopDone.dataset.buy;
   } else { ui.shopDone.textContent = 'Selesai'; ui.shopDone.dataset.buy = ''; ui.shopDone.disabled = false; }
 }
@@ -525,6 +627,13 @@ ui.skinList.addEventListener('click', (e) => {
   if (isOwned(s) && save.skin !== s.id) { save.skin = s.id; persist(); sfx.coin(); toast(`Bolu ${s.name} ${TOPPER_ICON[s.topper]}`); }
   renderShop();
 });
+ui.trailList.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-trail]'); if (!b) return;
+  const t = trailById(b.dataset.trail);
+  previewTrail = t.id; setTrail(t.id);
+  if (ownsTrail(t) && save.trail !== t.id) { save.trail = t.id; persist(); sfx.coin(); toast(`Jejak ${t.name} ${t.icon}`); }
+  renderShop();
+});
 ui.upList.addEventListener('click', (e) => {
   const b = e.target.closest('[data-up]'); if (!b) return;
   const k = b.dataset.up, price = UP_PRICES[save.up[k]];
@@ -533,16 +642,32 @@ ui.upList.addEventListener('click', (e) => {
   renderShop();
 });
 ui.shopDone.addEventListener('click', () => {
-  const id = ui.shopDone.dataset.buy;
-  if (id) {
+  const [kind, id] = (ui.shopDone.dataset.buy || '').split(':');
+  if (kind === 'skin') {
     const s = skinById(id);
+    if (s.price > save.wallet) { sfx.nope(); return; }
     save.wallet -= s.price; save.owned.push(id); save.skin = id; persist();
     sfx.buy(); burst(0, 1.8, 0, 40); toast(`Skin ${s.name} jadi milikmu! ${TOPPER_ICON[s.topper]}`, 1600);
+    const a = checkAchievements(); if (a.ach.length) setTimeout(() => toast(`${MEDAL[a.ach[0].tier]} Prestasi ${a.ach[0].name}! +${a.stars} ⭐`, 1800), 1700);
+    renderShop(); return;
+  }
+  if (kind === 'trail') {
+    const t = trailById(id);
+    if (t.price > save.wallet) { sfx.nope(); return; }
+    save.wallet -= t.price; save.ownedTrails.push(id); save.trail = id; persist();
+    sfx.buy(); burst(0, 1.8, 0, 40); toast(`Jejak ${t.name} jadi milikmu! ${t.icon}`, 1600);
     renderShop(); return;
   }
   closeShop();
 });
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => { shopTab = t.dataset.tab; renderShop(); }));
+$('btn-shop-close').addEventListener('click', closeShop);
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.mode === 'shop') closeShop(); });
+// prestasi
+$('btn-ach').addEventListener('click', () => { unlock(); renderAch(); show(ui.ach, true); });
+$('btn-ach-close').addEventListener('click', () => show(ui.ach, false));
+ui.ach.addEventListener('click', (e) => { if (e.target === ui.ach) show(ui.ach, false); });
+renderProgress();
 document.querySelectorAll('.open-shop').forEach((b) => b.addEventListener('click', () => { unlock(); openShop(); }));
 
 // ---------------------------------------------------------------------------
@@ -585,6 +710,7 @@ function loop(now) {
     const st = state.mode === 'play' ? (state.jumping ? (state.diving ? 'dive' : 'air') : state.sliding ? 'slide' : 'run') : state.mode === 'over' ? 'dizzy' : 'idle';
     bolu.update(dt, { state: st, speed: state.speed, vy: state.vy, lean: (LANE_X[state.targetLane] - player.position.x) * .2 });
     dust.update(dt, st === 'run', player.position.x, PLAYER_Z);
+    trail.update(dt, state.mode === 'play' ? st !== 'slide' : state.mode === 'shop', player.position, state.mode === 'shop');
     if (state.mode !== 'play') clouds.scroll(0, dt);
     for (const pu of powerUps) if (pu.active) pu.icon.rotation.y += dt * 2.5;
   }
@@ -597,7 +723,7 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
-if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose, processFrame, renderer, scene, setSkin, beginPlay, get pixelRatio() { return pixelRatio; }, music, get tune() { return tune; }, get player() { return player; } };
+if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, run, endRun, daily, renderProgress, gameOver, setTrail, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose, processFrame, renderer, scene, setSkin, beginPlay, get pixelRatio() { return pixelRatio; }, music, get tune() { return tune; }, get player() { return player; } };
 
 let lastSize = '';
 function resize() {

@@ -65,10 +65,17 @@
       </ul>
       <div class="row">
         <span class="wallet">⭐ <b class="wallet-n">0</b></span>
-        <button class="btn chip open-shop" type="button">👕 Lemari Bolu</button>
+        <button class="btn chip open-shop" type="button">👕 Lemari</button>
+        <button class="btn chip ach-btn" id="btn-ach" type="button">🏅 Prestasi</button>
       </div>
       <button id="btn-start" class="btn big">📷 Nyalakan kamera &amp; main</button>
       <button id="btn-keys" class="btn soft">⌨️ Main pakai keyboard / sentuh</button>
+      <div class="prog after" aria-label="Progres">
+        <div class="lvl"><b>Lv <span id="lv-n">1</span></b><span class="bar xp"><i id="xp-bar"></i></span><small id="xp-txt">0 XP</small></div>
+        <p class="next">🎁 <span id="next-unlock"></span></p>
+        <h3>Misi hari ini</h3>
+        <ul class="missions" id="missions"></ul>
+      </div>
       <p class="fine">Berdiri ±1,5 m dari kamera, badan sampai pinggang terlihat. Video diproses di HP/laptopmu saja, tidak dikirim ke mana pun.</p>
     </div>
   </section>
@@ -99,6 +106,7 @@
       <h2 id="over-title">Aduh, nabrak!</h2>
       <p class="lead">Skor <b id="final">0</b> · terbaik <b id="final-best">0</b></p>
       <p class="earned">+<b id="earned">0</b> ⭐ <span>· total <b class="wallet-n">0</b></span></p>
+      <div id="over-prog" class="over-prog"></div>
       <p id="unlock-hint" class="unlock-hint" hidden></p>
       <button id="btn-retry" class="btn big">🔁 Main lagi</button>
       <button class="btn soft open-shop" type="button">👕 Lemari Bolu</button>
@@ -116,12 +124,24 @@
       </header>
       <div class="tabs" role="tablist">
         <button role="tab" class="tab on" data-tab="skins">👕 Skin</button>
+        <button role="tab" class="tab" data-tab="trails">✨ Jejak</button>
         <button role="tab" class="tab" data-tab="ups">⚡ Upgrade</button>
       </div>
       <div id="skin-list" class="grid"></div>
+      <div id="trail-list" class="grid" hidden></div>
       <div id="up-list" class="ups" hidden></div>
       <button id="btn-shop-done" class="btn big">Selesai</button>
       <p class="fine">Bintang didapat dari bermain. Tidak ada pembelian dengan uang sungguhan.</p>
+    </div>
+  </section>
+
+  <!-- prestasi -->
+  <section id="ach" class="overlay" hidden>
+    <div class="card small">
+      <h2>Prestasi 🏅</h2>
+      <p class="lead">Target besar untuk jagoan gerak. Tiap medali memberi bintang!</p>
+      <ul class="ach-list" id="ach-list"></ul>
+      <button id="btn-ach-close" class="btn big" type="button">Oke!</button>
     </div>
   </section>
 

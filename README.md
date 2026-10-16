@@ -23,9 +23,19 @@ Teknologi: [Three.js](https://threejs.org) — dunia kartun prosedural (tanpa fi
 
 ## Lemari Bolu & power-up
 
-- **Bintang** yang dikumpulkan masuk dompet (disimpan di browser) untuk membuka **7 skin**: Stroberi, Cokelat, Pandan, Ubi Ungu, Keju, Pelangi, dan Juara (khusus: capai skor 1000). Skin bisa dicoba dulu sebelum dibeli. Tidak ada pembelian dengan uang sungguhan dan tidak ada undian.
+- **Bintang** yang dikumpulkan masuk dompet (disimpan di browser). Ada **13 skin**: 8 dibeli dengan harga bertahap (⭐ 150–2.200), 5 hanya terbuka lewat Level Bolu (Blueberry Lv 5, Matcha Lv 10, Galaksi Lv 15, Juara Lv 20, Legenda Lv 30). Ada juga **10 jejak** (emoji yang beterbangan di belakang Bolu), sebagian dibeli dan sebagian dari level. Semua bisa dicoba dulu sebelum dibeli. Tidak ada pembelian dengan uang sungguhan dan tidak ada undian.
 - **Power-up** di jalan: 🧲 Magnet (bintang tertarik), 🛡️ Perisai (kebal 1× tabrakan), ✨ Bintang ×2.
-- **Upgrade** memperpanjang durasi tiap power-up (3 level).
+- **Upgrade** memperpanjang durasi tiap power-up (5 level, ⭐ 100–800).
+
+## Progres jangka panjang (`progress.js`)
+
+Tujuannya membuat anak ingin **kembali setiap hari**, bukan main tanpa henti.
+
+- **Misi harian**: 3 misi gerak per hari (mis. lompat 30×, merunduk 25×, lari total 2.200 m, menukik 6×), berganti tiap tengah malam. Hadiahnya ⭐ 50–120 per misi, ditambah bonus kalau ketiganya selesai. Kesulitan naik mengikuti level. Tidak ada hukuman kalau terlewat.
+- **Level Bolu 1–30**: XP dari jarak, lompatan, rundukan, dan bintang. Kurva levelnya melengkung (awal cepat, makin tinggi makin menantang): sekitar 170 putaran menuju Level 30. Tiap naik level dapat ⭐, dan level tertentu membuka skin/jejak khusus. Hadiah level berikutnya selalu terlihat di layar awal.
+- **Prestasi** 🥉🥈🥇: Pelari (total km), Pelompat, Si Gesit, Kolektor, Rajin Bergerak (total *hari* bermain, bukan beruntun), Penakluk Misi, Juara Skor, dan Fashionista.
+- **Pengingat sehat**: setelah 20 menit bergerak dalam satu sesi, layar akhir menyarankan istirahat dan minum air.
+- Sengaja **tidak ada** undian/gacha, hadiah acak berbayar, hitung mundur penawaran, atau streak yang bisa hilang (pola-pola yang menekan anak).
 
 ## Jalankan lokal
 
@@ -43,7 +53,8 @@ Kamera butuh HTTPS atau `localhost`.
 - `bolu.js` — model & animasi prosedural Bolu
 - `world.js` — langit, tanah, pemandangan, rintangan, bintang, debu
 - `look.js` — material toon, garis tepi, penggabung geometri, shader dunia melengkung
-- `skins.js` — daftar skin, power-up, harga upgrade, simpanan progres
+- `skins.js` — daftar skin, jejak, power-up, harga upgrade, simpanan progres
+- `progress.js` — misi harian, Level Bolu, prestasi
 - `audio.js` — efek suara sintetis (koin, lompat, nabrak, sorak)
 
 ## Cara kerja pose → input
