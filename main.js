@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sfx, unlock, setMuted, isMuted } from './audio.js';
+import { sfx, unlock, setMuted, isMuted, music } from './audio.js';
 import { createBolu } from './bolu.js';
 import { curve, curved } from './look.js';
 import { SKY_HORIZON, addSky, addGround, makeScenery, makeClouds, makeObstacles, makeCoins, makeDust, makePowerUps, makeShieldBubble } from './world.js';
@@ -39,7 +39,11 @@ const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, p
 // Resolusi: maks 1.5× lalu turun otomatis kalau perangkat tidak sanggup 50 fps (lihat adaptQuality)
 let pixelRatio = Math.min(devicePixelRatio, 1.5);
 renderer.setPixelRatio(pixelRatio);
-renderer.setSize(innerWidth, innerHeight);
+// Ukuran mengikuti kotak CSS kanvas (position:fixed; inset:0). updateStyle=false supaya kanvas tidak
+// pernah dikunci ke lebar piksel lama — di iOS, innerWidth sering basi sesaat setelah layar diputar.
+const canvas = renderer.domElement;
+const viewSize = () => [canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight];
+renderer.setSize(...viewSize(), false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -49,11 +53,11 @@ scene.background = new THREE.Color(SKY_HORIZON);
 scene.fog = new THREE.Fog(SKY_HORIZON, 45, 260);
 
 // Kamera: pose "main" (di belakang Bolu) dan pose "lemari" (dekat, Bolu menghadap kamera).
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
 const cam = { play: new THREE.Vector3(), playLook: new THREE.Vector3(), shop: new THREE.Vector3(), shopLook: new THREE.Vector3(), blend: 0, look: new THREE.Vector3() };
 // Layar tegak (HP): mundurkan kamera & lebarkan FOV supaya ketiga jalur tetap terlihat
 function fitCamera() {
-  const a = innerWidth / innerHeight, portrait = clamp((1.2 - a) / .7, 0, 1);
+  const [w, h] = viewSize(), a = w / h, portrait = clamp((1.2 - a) / .7, 0, 1);
   camera.aspect = a; camera.fov = 55 + portrait * 17; camera.updateProjectionMatrix();
   cam.play.set(0, 3.3 + portrait * 1.2, 7.2 + portrait * 2.6); cam.playLook.set(0, 1.3, -10);
   // lemari: di layar lebar panel ada di kanan → Bolu digeser ke kiri; di HP panel di bawah → Bolu di atas
@@ -290,7 +294,7 @@ function resetRun() {
   player.position.set(0, 0, PLAYER_Z); bolu.setMood('happy');
   renderPowers();
 }
-function beginPlay() { tune = TUNE[input.source === 'pose' ? 'pose' : 'keyboard']; resetRun(); state.mode = 'play'; show(ui.hud, true); show(ui.over, false); show(ui.calib, false); show(ui.pause, false); show(ui.start, false); sfx.start(); toast('Ayo lari! 🏃'); }
+function beginPlay() { tune = TUNE[input.source === 'pose' ? 'pose' : 'keyboard']; resetRun(); state.mode = 'play'; show(ui.hud, true); show(ui.over, false); show(ui.calib, false); show(ui.pause, false); show(ui.start, false); sfx.start(); music.stop(.05); music.paused = false; music.start(); toast('Ayo lari! 🏃'); }
 
 let calibStart = 0;
 function beginCalib() { state.mode = 'calib'; pose.samples = []; pose.track = null; pose.lostSince = 0; calibStart = performance.now(); show(ui.start, false); show(ui.calib, true); show(ui.cam, true); }
@@ -310,7 +314,7 @@ function tickCalib(now) {
 }
 
 function gameOver() {
-  state.mode = 'over'; state.overT = 0; sfx.bump(); bolu.setMood('dizzy'); dust.puff(player.position.x, PLAYER_Z - .6, 8, .8);
+  state.mode = 'over'; state.overT = 0; music.stop(.4); sfx.bump(); bolu.setMood('dizzy'); dust.puff(player.position.x, PLAYER_Z - .6, 8, .8);
   state.pw = { magnet: 0, shield: 0, double: 0 }; renderPowers();
   const record = state.score > state.best;
   if (record) { state.best = state.score; try { localStorage.setItem('bolu.best', String(state.best)); } catch {} }
@@ -332,10 +336,10 @@ function gameOver() {
 }
 
 function togglePause() {
-  if (state.mode === 'play') { state.mode = 'pause'; show(ui.pause, true); }
+  if (state.mode === 'play') { state.mode = 'pause'; show(ui.pause, true); music.pause(); }
   else if (state.mode === 'pause') {
     if (!ui.pauseMsg.hidden) { pose.track = null; pose.lostSince = 0; ui.pauseMsg.hidden = true; } // kunci ulang ke orang paling dekat & tengah
-    state.mode = 'play'; show(ui.pause, false); last = performance.now();
+    state.mode = 'play'; show(ui.pause, false); last = performance.now(); music.resume();
   }
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden && state.mode === 'play') togglePause(); });
@@ -384,6 +388,7 @@ function placeCoin(lane, z) { const c = coins.find((x) => !x.active); if (!c) re
 function tickPlay(dt) {
   state.elapsed += dt;
   state.speed = Math.min(tune.max, tune.base + state.elapsed * tune.accel);
+  music.setTempo(116 + (state.speed - tune.base) / (tune.max - tune.base) * 28); // musik makin cepat bersama Bolu
   const dz = state.speed * dt; state.dist += dz;
 
   if (input.lane !== state.targetLane) { state.targetLane = input.lane; sfx.lane(); }
@@ -551,7 +556,7 @@ function adaptQuality(dt) {
   const avg = perf.sum / perf.n; perf.sum = 0; perf.n = 0;
   if (avg > .02 && pixelRatio > 1) {
     pixelRatio = Math.max(1, pixelRatio - .25);
-    renderer.setPixelRatio(pixelRatio); renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(pixelRatio); resize();
   } else if (avg > .02 && renderer.shadowMap.enabled) {
     renderer.shadowMap.enabled = false; // pilihan terakhir untuk perangkat sangat lemah
     scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
@@ -592,13 +597,30 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
-if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose, processFrame, renderer, scene, setSkin, beginPlay, get pixelRatio() { return pixelRatio; }, get tune() { return tune; }, get player() { return player; } };
+if (new URLSearchParams(location.search).has('debug')) window.__game = { state, save, grantPower, powerUps, openShop, pose, input, setPoseFrom, applyPose, processFrame, renderer, scene, setSkin, beginPlay, get pixelRatio() { return pixelRatio; }, music, get tune() { return tune; }, get player() { return player; } };
 
-addEventListener('resize', () => { fitCamera(); renderer.setSize(innerWidth, innerHeight); });
+let lastSize = '';
+function resize() {
+  const [w, h] = viewSize(), key = `${w}x${h}x${pixelRatio}`;
+  if (key === lastSize) return; lastSize = key;
+  renderer.setSize(w, h, false); fitCamera();
+}
+// iOS Safari: event resize bisa datang sebelum tata letak selesai → ukur ulang lewat beberapa jalur
+if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
+addEventListener('resize', resize);
+addEventListener('orientationchange', () => { resize(); setTimeout(resize, 250); setTimeout(resize, 600); });
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
 
 // Tombol
 ui.mute.textContent = isMuted() ? '🔇' : '🔊';
 ui.mute.addEventListener('click', () => { setMuted(!isMuted()); ui.mute.textContent = isMuted() ? '🔇' : '🔊'; });
+const btnMusic = $('btn-music');
+btnMusic.classList.toggle('off', !music.on);
+btnMusic.addEventListener('click', () => {
+  unlock(); music.on = !music.on; btnMusic.classList.toggle('off', !music.on);
+  if (music.on && state.mode === 'play') music.start();
+  toast(music.on ? 'Musik nyala 🎵' : 'Musik mati');
+});
 $('btn-start').addEventListener('click', async () => {
   unlock();
   const btn = $('btn-start'); btn.disabled = true; btn.textContent = 'Sebentar ya…';
