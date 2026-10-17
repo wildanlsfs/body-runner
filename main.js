@@ -13,11 +13,19 @@ const LANE_X = [-2.3, 0, 2.3];
 const PLAYER_Z = 0;
 const SPAWN_Z = -95;
 const GRAVITY = -30;
-// Tempo per mode kontrol. Gerakan badan manusia jauh lebih lambat dari tombol, jadi mode kamera dibuat
-// lebih santai: lari lebih pelan, jarak antar-rintangan lebih lebar, melayang & jongkok lebih lama.
+// Tempo per mode kontrol. Gerakan badan manusia jauh lebih lambat dari tombol, tapi yang dibutuhkan badan
+// adalah WAKTU antar-rintangan, bukan lari yang pelan. Jadi mode kamera tetap terasa kencang, sedangkan
+// jarak antar-baris dihitung dari waktu (gapT: detik, dari awal → kecepatan maks) supaya selalu ada
+// ±1,5–2 detik untuk condong/lompat/jongkok lalu kembali tegak. Melayang juga sedikit lebih lama.
 const TUNE = {
   keyboard: { base: 12, max: 26, accel: .3, gap: 18, jumpV: 11, gravity: -30, slide: .8, laneLerp: 11, distDiv: 2 },
-  pose: { base: 8, max: 15, accel: .1, gap: 28, jumpV: 10.5, gravity: -21, slide: 1.2, laneLerp: 8, distDiv: 1.3 },
+  pose: { base: 13, max: 20, accel: .12, gapT: [2.1, 1.55], gapJitter: .4, jumpV: 10.5, gravity: -23, slide: 1, laneLerp: 9, distDiv: 1.8 },
+};
+/** Jarak (m) ke baris rintangan berikutnya, diundi sekali tiap baris. */
+const nextGap = () => {
+  if (!tune.gapT) return tune.gap + Math.random() * 10;
+  const k = (state.speed - tune.base) / (tune.max - tune.base), [t0, t1] = tune.gapT;
+  return state.speed * (t0 + (t1 - t0) * k + Math.random() * tune.gapJitter);
 };
 let tune = TUNE.keyboard;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -339,7 +347,8 @@ const run = { jumps: 0, ducks: 0, dives: 0, powers: 0, lanes: 0 };
 const announced = new Set();
 function resetRun() {
   Object.assign(run, { jumps: 0, ducks: 0, dives: 0, powers: 0, lanes: 0 }); announced.clear();
-  Object.assign(state, { speed: tune.base, dist: 0, score: 0, coinsTaken: 0, targetLane: 1, vy: 0, y: 0, jumping: false, diving: false, slideOnLand: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, elapsed: 0, nextMilestone: 100, invuln: 0 });
+  Object.assign(state, { speed: tune.base, dist: 0, score: 0, coinsTaken: 0, targetLane: 1, vy: 0, y: 0, jumping: false, diving: false, slideOnLand: false, slide: 0, sliding: false, nextSpawnZ: SPAWN_Z, gap: 0, elapsed: 0, nextMilestone: 100, invuln: 0 });
+  state.gap = nextGap();
   state.pw = { magnet: 0, shield: 0, double: 0 };
   input.lane = 1; input.jump = false; input.duck = false; input.duckEdge = false;
   obstacles.forEach((o) => { o.active = false; o.mesh.visible = false; });
@@ -516,7 +525,7 @@ function tickPlay(dt) {
   scenery.scroll(dz);
   clouds.scroll(dz, dt);
   state.nextSpawnZ += dz;
-  if (state.nextSpawnZ > SPAWN_Z + tune.gap + Math.random() * 10) { spawnRow(SPAWN_Z); state.nextSpawnZ = SPAWN_Z; }
+  if (state.nextSpawnZ > SPAWN_Z + state.gap) { spawnRow(SPAWN_Z); state.nextSpawnZ = SPAWN_Z; state.gap = nextGap(); }
 
   const px = player.position.x, pyTop = state.y + (sliding ? 1.0 : 1.9);
   for (const o of obstacles) {

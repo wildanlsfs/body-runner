@@ -17,7 +17,7 @@ Teknologi: [Three.js](https://threejs.org) — dunia kartun prosedural (tanpa fi
 ## Mekanik
 
 - Dari jongkok bisa langsung lompat. Merunduk saat di udara membuat Bolu menukik turun lalu langsung jongkok begitu mendarat.
-- **Mode kamera lebih santai** dari mode keyboard (kecepatan 8→15 vs 12→26, jarak antar-rintangan 28 m vs 18 m, melayang ±1 dtk), karena gerakan badan lebih lambat dari tombol.
+- **Mode kamera tetap kencang tapi memberi waktu**: kecepatan 13→20 m/dtk (keyboard 12→26), dan jarak antar-baris rintangan dihitung dari *waktu*, bukan meter: ±2,1 dtk di awal → ±1,55 dtk di kecepatan maks (+0–0,4 dtk acak). Badan butuh waktu untuk condong/lompat/jongkok lalu kembali tegak; lari yang pelan justru membosankan. Melayang ±0,9 dtk supaya jeda deteksi kamera tetap tertutup.
 - **Kunci pemain:** kamera mendeteksi sampai 3 orang, tapi hanya orang yang dikunci saat kalibrasi (paling dekat & di tengah) yang menggerakkan Bolu. Orang yang lewat diabaikan. Kalau pemain hilang lebih dari 1,5 detik, game dijeda.
 - Resolusi turun otomatis kalau perangkat tidak sanggup ±50 fps.
 
